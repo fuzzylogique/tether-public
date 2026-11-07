@@ -1,14 +1,37 @@
 import {
   ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, type Client, type TextBasedChannel,
 } from "discord.js";
-import type { Notifier, Plan } from "@tether/core";
+import type { Card, MessageBody, Notifier, Plan } from "@tether/core";
 import { agents } from "@tether/core";
 import { approvalEmbed, planEmbed, statusEmbed } from "./embeds.js";
+import { render, renderEdit } from "./ui/render.js";
+
+type Sendable = TextBasedChannel & {
+  send: (o: unknown) => Promise<{ id: string }>;
+  messages?: { fetch: (id: string) => Promise<{ edit: (o: unknown) => Promise<unknown> }> };
+};
 
 async function textChannel(client: Client, id: string) {
   const ch = await client.channels.fetch(id);
   if (!ch || !ch.isTextBased() || !("send" in ch)) throw new Error(`channel ${id} is not text-based`);
-  return ch as TextBasedChannel & { send: (o: unknown) => Promise<{ id: string }> };
+  return ch as Sendable;
+}
+
+type Files = { name: string; data: Buffer }[] | undefined;
+
+/** Card bodies render as Components V2; extra attachments join the card as a gallery. */
+async function payload(body: MessageBody, attachments?: Files) {
+  if (body.card) {
+    const card: Card = attachments?.length
+      ? { ...body.card, blocks: [...body.card.blocks, { kind: "gallery", items: attachments.map((a) => ({ name: a.name, data: a.data })) }] }
+      : body.card;
+    return render(card);
+  }
+  return {
+    content: (body.text ?? "").slice(0, 1990),
+    files: attachments?.map((a) => new AttachmentBuilder(a.data, { name: a.name })),
+    allowedMentions: { parse: [] as never[] },
+  };
 }
 
 export function planComponents(runId: string, plan: Plan) {
@@ -48,9 +71,9 @@ export class DiscordNotifier implements Notifier {
     return id;
   }
 
-  async postPlanCard({ run, plan }: Parameters<Notifier["postPlanCard"]>[0]) {
+  async postPlanCard({ run, plan, card }: Parameters<Notifier["postPlanCard"]>[0]) {
     const ch = await textChannel(this.client, this.target(run.source));
-    const msg = await ch.send({ embeds: [planEmbed(run.id, run.request, plan)], components: planComponents(run.id, plan) });
+    const msg = await ch.send(card ? await render(card) : { embeds: [planEmbed(run.id, run.request, plan)], components: planComponents(run.id, plan) });
     return { channelId: this.target(run.source), messageId: msg.id };
   }
 
@@ -59,44 +82,52 @@ export class DiscordNotifier implements Notifier {
     const ch = await textChannel(this.client, channelId);
     const out = [];
     for (const a of actions) {
-      const msg = await ch.send({ embeds: [approvalEmbed(a)], components: approvalComponents(a.id) });
+      const msg = await ch.send(a.card ? await render(a.card) : { embeds: [approvalEmbed(a)], components: approvalComponents(a.id) });
       out.push({ id: a.id, channelId, messageId: msg.id });
     }
     return out;
   }
 
-  async updateStatus({ run, lines, status }: Parameters<Notifier["updateStatus"]>[0]) {
+  async updateStatus({ run, lines, status, card }: Parameters<Notifier["updateStatus"]>[0]) {
     const channelId = this.target(run.source);
     const ch = await textChannel(this.client, channelId);
-    const embed = statusEmbed(run.id, run.request, lines, status);
+    // The live status card is text-only, so in-place edits never drop attachments.
+    const body = card ? await renderEdit(card) : { embeds: [statusEmbed(run.id, run.request, lines ?? [], status)] };
     const { db, schema } = await import("@tether/core");
     const { eq } = await import("drizzle-orm");
     const [row] = await db().select({ source: schema.runs.source }).from(schema.runs).where(eq(schema.runs.id, run.id));
     const existing = row?.source.statusMessageId;
-    if (existing && "messages" in ch) {
+    if (existing && ch.messages) {
       try {
-        const m = await (ch as { messages: { fetch: (id: string) => Promise<{ edit: (o: unknown) => Promise<unknown> }> } }).messages.fetch(existing);
-        await m.edit({ embeds: [embed] });
+        const m = await ch.messages.fetch(existing);
+        await m.edit(body);
         return;
       } catch { /* fall through and post anew */ }
     }
-    const msg = await ch.send({ embeds: [embed] });
+    const msg = await ch.send(card ? await render(card) : body);
     await db().update(schema.runs).set({ source: { ...(row?.source ?? run.source), statusMessageId: msg.id } }).where(eq(schema.runs.id, run.id));
   }
 
-  async postSummary({ run, text, attachments }: Parameters<Notifier["postSummary"]>[0]) {
+  async postSummary({ run, attachments, ...body }: Parameters<Notifier["postSummary"]>[0]) {
     const ch = await textChannel(this.client, this.target(run.source));
-    await ch.send({ content: text.slice(0, 1990), files: attachments?.map((a) => new AttachmentBuilder(a.data, { name: a.name })) });
+    await ch.send(await payload(body as MessageBody, attachments));
   }
 
-  async postToChannel({ channelId, text, attachments }: Parameters<Notifier["postToChannel"]>[0]) {
+  async postToChannel({ channelId, attachments, ...body }: Parameters<Notifier["postToChannel"]>[0]) {
     const ch = await textChannel(this.client, channelId);
-    const msg = await ch.send({ content: text.slice(0, 1990), files: attachments?.map((a) => new AttachmentBuilder(a.data, { name: a.name })) });
+    const msg = await ch.send(await payload(body as MessageBody, attachments));
     return { messageId: msg.id };
   }
 
-  async dm({ discordId, text }: Parameters<Notifier["dm"]>[0]) {
+  async editMessage({ channelId, messageId, ...body }: Parameters<Notifier["editMessage"]>[0]) {
+    const ch = await textChannel(this.client, channelId);
+    if (!ch.messages) return;
+    const m = await ch.messages.fetch(messageId);
+    await m.edit(body.card ? await renderEdit(body.card) : { content: (body.text ?? "").slice(0, 1990) });
+  }
+
+  async dm({ discordId, ...body }: Parameters<Notifier["dm"]>[0]) {
     const user = await this.client.users.fetch(discordId);
-    await user.send(text.slice(0, 1990));
+    await user.send(await payload(body as MessageBody) as never);
   }
 }
