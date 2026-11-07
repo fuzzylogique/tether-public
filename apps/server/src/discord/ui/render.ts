@@ -4,7 +4,7 @@ import {
   StringSelectMenuBuilder, TextDisplayBuilder, ThumbnailBuilder,
   type MessageActionRowComponentBuilder, type MessageMentionOptions,
 } from "discord.js";
-import type { Action, Block, Card, Media } from "@tether/core";
+import { kvText, type Action, type Block, type Card, type Media } from "@tether/core";
 import { emojiComponent, resolveShortcodes } from "./emoji.js";
 import { chartPng } from "./raster.js";
 
@@ -55,10 +55,6 @@ function row(actions: Action[]): { row: ActionRowBuilder<MessageActionRowCompone
   const buttons = actions.filter((a): a is Extract<Action, { kind: "button" | "link" }> => a.kind !== "select").slice(0, 5);
   r.addComponents(buttons.map(button));
   return { row: r, count: 1 + buttons.length };
-}
-
-function kvMarkdown(rows: [string, string][]) {
-  return rows.map(([k, v]) => `**${k}**  ${v}`).join("\n");
 }
 
 /** Collects attachments for one message and hands out unique `attachment://` names. */
@@ -166,7 +162,7 @@ async function addBlock(c: ContainerBuilder, b: Block, files: Files, md: (s: str
       return 1;
     case "kv":
       if (!b.rows.length) return 0;
-      c.addTextDisplayComponents(new TextDisplayBuilder().setContent(md(kvMarkdown(b.rows))));
+      c.addTextDisplayComponents(new TextDisplayBuilder().setContent(md(kvText(b.rows))));
       return 1;
     case "separator":
       c.addSeparatorComponents(new SeparatorBuilder().setDivider(b.divider ?? true).setSpacing(b.large ? SeparatorSpacingSize.Large : SeparatorSpacingSize.Small));

@@ -85,6 +85,11 @@ export function mention(discordId?: string | null, fallback = "unassigned") {
   return discordId ? `<@${discordId}>` : fallback;
 }
 
+/** `**Label**  value` lines, the same markdown a `kv` block renders to (for use inside sections). */
+export function kvText(rows: [string, string][]) {
+  return rows.map(([k, v]) => `**${k}**  ${v}`).join("\n");
+}
+
 export function kv(rows: [string, string | number | null | undefined][]): Block {
   return { kind: "kv", rows: rows.filter(([, v]) => v !== undefined).map(([k, v]) => [k, v === null || v === "" ? "none" : String(v)]) };
 }

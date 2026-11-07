@@ -8,6 +8,9 @@ import { runAgentLoop, settleAction, userMessage, type StepRunner } from "../../
 import { buildToolCtx, loadActor } from "../../runtime/context.js";
 import type { Notifier } from "../../tools/types.js";
 import { runs } from "../../db/schema.js";
+import { actionRef, approvalCardFor, approvalContext, settledDecision } from "../../runtime/cards.js";
+import { approvalCard } from "../../ui/cards/approval.js";
+import { shortId } from "../../ui/card.js";
 
 const cache = new WeakMap<Notifier, ReturnType<typeof build>>();
 
@@ -49,14 +52,15 @@ function build(notifier: Notifier) {
         if (outcome.kind !== "await_approval") {
           const status = outcome.kind === "done" ? "done" : "failed";
           const output = outcome.kind === "done" ? outcome.output : `Failed: ${outcome.error}`;
-          await step.run("finish-step", async () => {
+          const { finishedAt } = await step.run("finish-step", async () => {
             await db().update(steps).set({ status, output, messages, updatedAt: new Date() }).where(eq(steps.id, d.stepId));
             if (d.sessionThreadId) {
               await db().insert(agentSessions).values({ threadId: d.sessionThreadId, orgId: run.orgId, agent: d.agent, messages })
                 .onConflictDoUpdate({ target: agentSessions.threadId, set: { messages, updatedAt: new Date() } });
             }
+            return { finishedAt: new Date().toISOString() };
           });
-          return { status, output };
+          return { status, output, finishedAt };
         }
 
         // Post approval cards for every gated action in this turn.
@@ -66,7 +70,10 @@ function build(notifier: Notifier) {
           await db().update(runs).set({ status: "awaiting_approval", updatedAt: new Date() }).where(eq(runs.id, d.runId));
           const refs = await notifier.postApprovalCards({
             run: runRef,
-            actions: rows.map((a) => ({ id: a.id, tool: a.tool, agent: a.agent, summary: a.summary, risk: a.risk as never, effect: a.effect as never, args: a.args })),
+            actions: await Promise.all(rows.map(async (a) => {
+              const ref = actionRef(a);
+              return { ...ref, card: approvalCard(ref, { context: await approvalContext(ctx.org, ref) }) };
+            })),
           });
           for (const ref of refs) await db().update(actions).set({ messageRef: { channelId: ref.channelId, messageId: ref.messageId } }).where(eq(actions.id, ref.id));
           return refs;
@@ -80,7 +87,17 @@ function build(notifier: Notifier) {
           if (!decided) {
             await step.run(`r${resume}:remind:${actionId}`, async () => {
               const ops = ctx.org.channels["ops"];
-              if (ops) await notifier.postToChannel({ channelId: ops, text: `⏰ An approval from **${agent.label}** has been waiting 2 hours (run ${d.runId.slice(0, 8)}).` });
+              if (ops) {
+                const ref = cards.find((c) => c.id === actionId);
+                const link = ref ? `https://discord.com/channels/${ctx.org.guildId}/${ref.channelId}/${ref.messageId}` : undefined;
+                await notifier.postToChannel({
+                  channelId: ops,
+                  card: {
+                    accent: "#EF9F27",
+                    blocks: [{ kind: "section", md: [`⏰ An approval from **${agent.label}** has been waiting 2 hours`, `-# run ${shortId(d.runId)}`], button: link ? { kind: "link", url: link, label: "Jump to card" } : undefined }],
+                  },
+                });
+              }
               await db().insert(events).values({ orgId: run.orgId, runId: d.runId, kind: "approval_reminder", agent: d.agent, data: { actionId } });
             });
             decided = await step.waitForEvent(`r${resume}:wait2:${actionId}`, {
@@ -88,7 +105,14 @@ function build(notifier: Notifier) {
             });
           }
           if (!decided) {
-            await step.run(`r${resume}:expire:${actionId}`, () => db().update(actions).set({ status: "expired", decidedAt: new Date() }).where(eq(actions.id, actionId)));
+            await step.run(`r${resume}:expire:${actionId}`, async () => {
+              const [row] = await db().update(actions).set({ status: "expired", decidedAt: new Date() }).where(eq(actions.id, actionId)).returning();
+              const ref = cards.find((c) => c.id === actionId);
+              if (row && ref) {
+                await notifier.editMessage({ channelId: ref.channelId, messageId: ref.messageId, card: await approvalCardFor(ctx.org, row, { status: "expired", at: new Date() }) })
+                  .catch((e) => console.warn("approval re-render failed", e));
+              }
+            });
             parts.push({ functionResponse: { name: "approval", response: { status: "rejected", reason: "approval timed out" } } });
             continue;
           }
@@ -98,13 +122,24 @@ function build(notifier: Notifier) {
             ctx: deciderCtx, step: ((id: string, fn: () => Promise<unknown>) => step.run(`r${resume}:${id}`, fn)) as unknown as StepRunner,
           });
           parts.push(settled.part);
+          // Re-render the card with the outcome (executed / failed / rejected) and drop its buttons.
+          await step.run(`r${resume}:rerender:${actionId}`, async () => {
+            const [row] = await db().select().from(actions).where(eq(actions.id, actionId));
+            const ref = cards.find((c) => c.id === actionId);
+            const decision = row && settledDecision(row, decided.data.deciderName);
+            if (!row || !ref || !decision) return;
+            await notifier.editMessage({ channelId: ref.channelId, messageId: ref.messageId, card: await approvalCardFor(ctx.org, row, decision) })
+              .catch((e) => console.warn("approval re-render failed", e));
+          });
         }
         messages.push({ role: "user", parts });
         await step.run(`r${resume}:mark-running`, () => db().update(steps).set({ status: "running", messages, updatedAt: new Date() }).where(eq(steps.id, d.stepId)));
-        void cards;
       }
-      await step.run("too-many-resumes", () => db().update(steps).set({ status: "failed", output: "too many approval rounds", updatedAt: new Date() }).where(eq(steps.id, d.stepId)));
-      return { status: "failed" as const, output: "too many approval rounds" };
+      const finishedAt = await step.run("too-many-resumes", async () => {
+        await db().update(steps).set({ status: "failed", output: "too many approval rounds", updatedAt: new Date() }).where(eq(steps.id, d.stepId));
+        return new Date().toISOString();
+      });
+      return { status: "failed" as const, output: "too many approval rounds", finishedAt };
     },
   );
 }

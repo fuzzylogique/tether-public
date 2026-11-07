@@ -5,10 +5,12 @@ import {
 } from "discord.js";
 import { eq } from "drizzle-orm";
 import {
-  agentNames, agents, buildToolCtx, db, getTool, inngest, loadActor, loadOrgByGuild, schema, type Plan,
+  agentNames, agents, approvalCardFor, buildToolCtx, dashboardRunUrl, db, getTool, inngest, loadActor, loadOrgByGuild, planCard, schema,
+  type ApprovalDecision, type Plan, type PlanDecision,
 } from "@tether/core";
 import { planEmbed, resultEmbed } from "./embeds.js";
 import { planComponents } from "./notifier.js";
+import { renderEdit } from "./ui/render.js";
 
 type Org = typeof schema.orgs.$inferSelect;
 
@@ -171,14 +173,50 @@ async function loadRun(runId: string) {
   return run;
 }
 
+type Run = typeof schema.runs.$inferSelect;
+type Interactive = ButtonInteraction | StringSelectMenuInteraction | ModalSubmitInteraction;
+
+/** Re-render a plan message: a V2 card, or the legacy embed for messages posted before the migration. */
+async function updatePlan(i: Interactive, run: Run, plan: Plan, decision?: PlanDecision) {
+  if (!("update" in i)) return;
+  if (i.message?.embeds.length) {
+    const status = decision ? `${decision.approved ? "Approved" : "Cancelled"} by ${decision.by}` : undefined;
+    return i.update({ embeds: [planEmbed(run.id, run.request, plan, status)], components: decision ? [] : planComponents(run.id, plan) });
+  }
+  return i.update(await renderEdit(planCard({
+    runId: run.id, request: run.request, plan, requester: { discordId: run.actorDiscordId }, createdAt: run.createdAt,
+    decision, dashboardUrl: dashboardRunUrl(run.id),
+  })));
+}
+
+/** Re-render an approval message with its decision (buttons removed). */
+async function updateApproval(i: Interactive, action: typeof schema.actions.$inferSelect, decision: ApprovalDecision, args?: Record<string, unknown>) {
+  if (!("update" in i)) return;
+  if (i.message?.embeds.length) {
+    const embed = i.message.embeds[0];
+    const label = decision.status === "edited" ? "✏️ Edited and approved" : decision.status === "rejected" ? "❌ Rejected" : "✅ Approved";
+    return i.update({ content: `${label} by ${decision.by}`, embeds: embed ? [embed] : [], components: [] });
+  }
+  const [org] = await db().select().from(schema.orgs).where(eq(schema.orgs.id, action.orgId));
+  if (!org) return i.update({ components: [] });
+  return i.update(await renderEdit(await approvalCardFor(org, action, decision, args)));
+}
+
 async function onButton(customId: string, i: ButtonInteraction) {
-  const [kind, verb, id] = customId.split(":");
+  const [kind, verb, id, sub] = customId.split(":");
   if (kind === "plan" && id) {
     const run = await loadRun(id);
     if (!run?.plan) return i.reply({ content: "This plan no longer exists.", ephemeral: true });
     if (verb === "run" || verb === "cancel") {
       await inngest.send({ name: "tether/plan.decided", data: { runId: id, approved: verb === "run", plan: run.plan, deciderDiscordId: i.user.id } });
-      await i.update({ embeds: [planEmbed(id, run.request, run.plan, verb === "run" ? `Approved by ${i.user.displayName}` : `Cancelled by ${i.user.displayName}`)], components: [] });
+      await updatePlan(i, run, run.plan, { approved: verb === "run", by: i.user.displayName, at: new Date() });
+      return;
+    }
+    if (verb === "toggle" && sub) {
+      if (run.status !== "proposed") return i.reply({ content: `This plan is already ${run.status}.`, ephemeral: true });
+      const plan: Plan = { ...run.plan, steps: run.plan.steps.map((s) => (s.id === sub ? { ...s, enabled: !s.enabled } : s)) };
+      await db().update(schema.runs).set({ plan, updatedAt: new Date() }).where(eq(schema.runs.id, id));
+      await updatePlan(i, run, plan);
       return;
     }
     if (verb === "edit") {
@@ -196,8 +234,7 @@ async function onButton(customId: string, i: ButtonInteraction) {
     if (action.status !== "pending") return i.reply({ content: `Already ${action.status}.`, ephemeral: true });
     if (verb === "approve" || verb === "reject") {
       await inngest.send({ name: "tether/action.decided", data: { actionId: id, runId: action.runId, approved: verb === "approve", deciderDiscordId: i.user.id, deciderName: i.user.displayName } });
-      const embed = i.message.embeds[0];
-      await i.update({ content: `${verb === "approve" ? "✅ Approved" : "❌ Rejected"} by ${i.user.displayName}`, embeds: embed ? [embed] : [], components: [] });
+      await updateApproval(i, action, { status: verb === "approve" ? "approved" : "rejected", by: i.user.displayName, at: new Date() });
       return;
     }
     if (verb === "edit") {
@@ -222,7 +259,7 @@ async function onSelect(customId: string, values: string[], i: StringSelectMenuI
   if (!run?.plan) return i.reply({ content: "Plan not found.", ephemeral: true });
   const plan: Plan = { ...run.plan, steps: run.plan.steps.map((s) => ({ ...s, enabled: values.includes(s.id) })) };
   await db().update(schema.runs).set({ plan, updatedAt: new Date() }).where(eq(schema.runs.id, id));
-  await i.update({ embeds: [planEmbed(id, run.request, plan)], components: planComponents(id, plan) });
+  await updatePlan(i, run, plan);
 }
 
 async function onModal(customId: string, i: ModalSubmitInteraction) {
@@ -235,7 +272,7 @@ async function onModal(customId: string, i: ModalSubmitInteraction) {
       return v ? { ...s, instruction: v } : s;
     }) };
     await db().update(schema.runs).set({ plan, planHistory: [...run.planHistory, plan], updatedAt: new Date() }).where(eq(schema.runs.id, id));
-    if (i.isFromMessage()) await i.update({ embeds: [planEmbed(id, run.request, plan)], components: planComponents(id, plan) });
+    if (i.isFromMessage()) await updatePlan(i, run, plan);
     else await i.reply({ content: "Plan updated.", ephemeral: true });
     return;
   }
@@ -247,7 +284,7 @@ async function onModal(customId: string, i: ModalSubmitInteraction) {
     if (raw) { try { editedArgs = JSON.parse(raw); } catch { return i.reply({ content: "Invalid JSON.", ephemeral: true }); } }
     else editedArgs = { subject: i.fields.getTextInputValue("subject"), body: i.fields.getTextInputValue("body") };
     await inngest.send({ name: "tether/action.decided", data: { actionId: id, runId: action.runId, approved: true, editedArgs, deciderDiscordId: i.user.id, deciderName: i.user.displayName } });
-    if (i.isFromMessage()) await i.update({ content: `✏️ Edited and approved by ${i.user.displayName}`, components: [] });
+    if (i.isFromMessage()) await updateApproval(i, action, { status: "edited", by: i.user.displayName, at: new Date() }, { ...action.args, ...editedArgs });
     else await i.reply({ content: "Edited and approved.", ephemeral: true });
   }
 }
