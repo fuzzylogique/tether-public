@@ -58,6 +58,8 @@ function build(notifier: Notifier) {
               runId, stepId: stepIdByKey[s.id]!, agent: s.agent, instruction: s.instruction,
               dependencyOutputs: Object.fromEntries(s.dependsOn.filter((d) => outputs[d]).map((d) => [d, outputs[d]!])),
               actorDiscordId: run.actorDiscordId ?? undefined,
+              // Receipts and photos on the triggering message; parse_receipt reads these.
+              attachments: event.data.attachments,
               sessionThreadId: run.trigger === "thread" ? run.source.threadId : undefined,
             },
           // Swallow a child that exhausted its own retries: rethrowing would make this function's
@@ -96,7 +98,7 @@ function build(notifier: Notifier) {
       if (needsPlan && plan.steps.length === 1 && run.trigger !== "cron" && !isFollowUp) {
         await step.sendEvent("escalate-to-plan", {
           name: "tether/request.received",
-          data: { orgId: run.orgId, trigger: "mention", mode: "auto", text: `${run.request}\n\n(Follow-up from ${plan.steps[0]!.agent}: ${needsPlan})`, source: run.source, actorDiscordId: run.actorDiscordId ?? undefined },
+          data: { orgId: run.orgId, trigger: "mention", mode: "auto", text: `${run.request}\n\n(Follow-up from ${plan.steps[0]!.agent}: ${needsPlan})`, source: run.source, actorDiscordId: run.actorDiscordId ?? undefined, attachments: event.data.attachments },
         });
       }
       return { status: failed ? "failed" : "done", outputs };

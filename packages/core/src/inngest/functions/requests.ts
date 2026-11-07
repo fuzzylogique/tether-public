@@ -20,7 +20,7 @@ export function handleRequestFn(notifier: Notifier) {
         const [row] = await db().insert(runs).values({
           orgId: d.orgId, trigger: d.trigger, source: d.source, actorDiscordId: d.actorDiscordId, request: d.text, status: "proposed",
         }).returning();
-        await db().insert(events).values({ orgId: d.orgId, runId: row!.id, kind: "run_created", data: { trigger: d.trigger, mode: d.mode } });
+        await db().insert(events).values({ orgId: d.orgId, runId: row!.id, kind: "run_created", data: { trigger: d.trigger, mode: d.mode, attachments: d.attachments } });
         return row!;
       });
 
@@ -64,7 +64,7 @@ export function handleRequestFn(notifier: Notifier) {
 
       await step.run("mark-approved", () => db().update(runs).set({ status: "approved", updatedAt: new Date() }).where(eq(runs.id, run.id)));
       // Same reasoning as run-plan: a retry here would re-invoke the whole plan from scratch.
-      const result = await step.invoke("execute", { function: runPlanFn(notifier), data: { runId: run.id } })
+      const result = await step.invoke("execute", { function: runPlanFn(notifier), data: { runId: run.id, attachments: d.attachments } })
         .catch(async (e: unknown) => {
           const error = e instanceof Error ? e.message : String(e);
           await step.run("mark-failed", async () => {

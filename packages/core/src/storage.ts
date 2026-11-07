@@ -14,12 +14,32 @@ function s3() {
   return _s3;
 }
 
-/** Vultr Object Storage (S3 compatible). Falls back to a data URL when unconfigured so dev still works. */
-export async function putObject(key: string, data: Buffer, contentType: string): Promise<string> {
+/** True when Vultr Object Storage keys and a bucket are configured. */
+export function storageConfigured(): boolean {
+  const e = env();
+  return Boolean(s3() && e.S3_BUCKET);
+}
+
+/** Public hostname objects are served from (`<bucket>.<region>.vultrobjects.com`), or undefined when unconfigured. */
+export function storageHost(): string | undefined {
+  const e = env();
+  if (!storageConfigured()) return undefined;
+  return `${e.S3_BUCKET}.${e.S3_ENDPOINT!.replace(/^https?:\/\//, "")}`;
+}
+
+/**
+ * Upload to Vultr Object Storage (S3 compatible) and return the public URL.
+ * Returns undefined when storage is not configured so callers can fall back to the original URL.
+ */
+export async function uploadObject(key: string, data: Buffer, contentType: string): Promise<string | undefined> {
   const client = s3();
   const e = env();
-  if (!client || !e.S3_BUCKET) return `data:${contentType};base64,${data.toString("base64")}`;
+  if (!client || !e.S3_BUCKET) return undefined;
   await client.send(new PutObjectCommand({ Bucket: e.S3_BUCKET, Key: key, Body: data, ContentType: contentType, ACL: "public-read" }));
-  const host = e.S3_ENDPOINT!.replace("https://", "");
-  return `https://${e.S3_BUCKET}.${host}/${key}`;
+  return `https://${storageHost()}/${key}`;
+}
+
+/** uploadObject with a data-URL fallback so image generation still works in dev without keys. Never store the fallback in a sheet cell. */
+export async function putObject(key: string, data: Buffer, contentType: string): Promise<string> {
+  return (await uploadObject(key, data, contentType)) ?? `data:${contentType};base64,${data.toString("base64")}`;
 }

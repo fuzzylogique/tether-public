@@ -3,7 +3,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { defineTool } from "./types.js";
 import { budgetLines, expenses } from "../db/schema.js";
 import { appendRow, clearRow, readRange } from "../google/sheets.js";
-import { fetchAsInlineData, generateStructuredMultimodal } from "../runtime/gemini.js";
+import { generateStructuredMultimodal } from "../runtime/gemini.js";
+import { storageHost, uploadObject } from "../storage.js";
 
 export const budgetSummary = defineTool({
   name: "budget_summary",
@@ -70,23 +71,52 @@ const receiptSchema = z.object({
   suggestedCategory: z.string().describe("One of the org budget categories if obvious, else best guess"),
 });
 
+// Receipt bytes come from the Discord CDN (or our own bucket), never from an arbitrary URL the model chose.
+const RECEIPT_HOSTS = ["cdn.discordapp.com", "media.discordapp.net"];
+const MAX_RECEIPT_BYTES = 10 * 1024 * 1024;
+
+function allowedReceiptHost(url: string): boolean {
+  let host: string;
+  try { host = new URL(url).hostname; } catch { return false; }
+  const own = storageHost();
+  return RECEIPT_HOSTS.includes(host) || (!!own && host === own);
+}
+
 export const parseReceipt = defineTool({
   name: "parse_receipt",
-  description: "Read a receipt image attached to the message (or at a URL) and extract vendor, total, date, and line items.",
-  input: z.object({ imageUrl: z.string().url().optional().describe("Defaults to the first image attachment") }),
+  description: "Read the receipt image attached to the message, extract vendor, total, date and line items, and keep a durable copy of the image. Pass the returned receiptUrl to log_expense.",
+  input: z.object({ imageUrl: z.string().url().optional().describe("Defaults to the first image attachment; must be a Discord attachment URL") }),
   effect: "read", risk: "low",
   summarize: () => "Parse receipt image",
   async execute(args, ctx) {
-    const url = args.imageUrl ?? ctx.attachments?.find((a) => a.contentType?.startsWith("image/"))?.url;
+    const att = ctx.attachments?.find((a) => a.contentType?.startsWith("image/"));
+    const url = args.imageUrl ?? att?.url;
     if (!url) return { error: "No receipt image attached" };
-    const part = await fetchAsInlineData(url);
+    if (!allowedReceiptHost(url)) return { error: "Receipt images must be Discord attachments" };
+
+    const res = await fetch(url);
+    if (!res.ok) return { error: `Could not fetch the receipt image (HTTP ${res.status})` };
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > MAX_RECEIPT_BYTES) return { error: "Receipt image is larger than 10 MB" };
+    const mimeType = res.headers.get("content-type")?.split(";")[0] || att?.contentType || "image/jpeg";
+
+    // Discord CDN links are signed and expire within hours, so the sheet would end up with dead links.
+    // Store a copy in Vultr Object Storage when it is configured; otherwise keep the original URL.
+    let stored: string | undefined;
+    try {
+      const ext = (mimeType.split("/")[1] ?? "jpg").replace("jpeg", "jpg");
+      stored = await uploadObject(`receipts/${ctx.org.id}/${Date.now()}.${ext}`, buf, mimeType);
+    } catch (e) {
+      console.warn("[parse_receipt] object storage upload failed, keeping Discord URL:", e instanceof Error ? e.message : e);
+    }
+
     const categories = (await ctx.db.select({ c: budgetLines.category }).from(budgetLines).where(eq(budgetLines.orgId, ctx.org.id))).map((r) => r.c);
     const parsed = await generateStructuredMultimodal({
       system: "You extract structured data from receipts. Be exact with the total.",
-      parts: [part, { text: `Budget categories: ${categories.join(", ")}. Extract the receipt.` }],
+      parts: [{ inlineData: { mimeType, data: buf.toString("base64") } }, { text: `Budget categories: ${categories.join(", ")}. Extract the receipt.` }],
       schema: receiptSchema,
     });
-    return { ...parsed, receiptUrl: url };
+    return { ...parsed, receiptUrl: stored ?? url, receiptStorage: stored ? "vultr-object-storage" : "discord-cdn" };
   },
 });
 

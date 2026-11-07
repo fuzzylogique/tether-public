@@ -19,7 +19,7 @@ export type Events = {
     };
   };
   "tether/plan.decided": { data: { runId: string; approved: boolean; plan?: Plan; deciderDiscordId?: string } };
-  "tether/plan.approved": { data: { runId: string } };
+  "tether/plan.approved": { data: { runId: string; attachments?: Attachment[] } };
   "tether/step.requested": {
     data: {
       runId: string; stepId: string; agent: string; instruction: string;
