@@ -19,6 +19,8 @@ export function toGeminiSchema(zodSchema: z.ZodTypeAny): Schema {
       const out: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
         if (["$schema", "additionalProperties", "default", "$ref", "definitions"].includes(k)) continue;
+        if (k === "exclusiveMinimum") { out.minimum = v; continue; }
+        if (k === "exclusiveMaximum") { out.maximum = v; continue; }
         out[k] = clean(v);
       }
       return out;

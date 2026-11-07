@@ -13,7 +13,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push && tsx src/db/applyTigerSql.ts",
+    "db:push": "tsx src/db/applyTigerSql.ts --extensions && drizzle-kit push && tsx src/db/applyTigerSql.ts",
     "db:seed": "tsx src/db/seed.ts",
     "eval:plans": "tsx src/eval/plans.ts"
   },
