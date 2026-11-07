@@ -6,7 +6,7 @@ import type { Plan } from "../db/schema.js";
 import type { ActionRef } from "../tools/types.js";
 import { TETHER } from "./tokens.js";
 import { kv, sep, text, type Card } from "./card.js";
-import { activityCard, approvalCard, planCard, statusCard, summaryCard, type StepState } from "./cards/index.js";
+import { activityCard, approvalCard, budgetCard, calendarCard, planCard, sponsorsCard, statusCard, summaryCard, tasksCard, type StepState } from "./cards/index.js";
 
 export const DEFAULT_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png";
 
@@ -87,6 +87,43 @@ export const APPROVALS = {
   }, "write"),
 };
 
+// Seed values (src/db/seed.ts), with the receipt above already logged.
+const budgetRows = [["Food", 4000, 1850], ["Venue", 2500, 2450], ["Swag", 1500, 920], ["Prizes", 3000, 0], ["Marketing", 600, 520]] as const;
+export const BUDGET = {
+  rows: budgetRows.map(([category, allocated, spent]) => ({ category, allocated, spent, remaining: allocated - spent, pctUsed: Math.round((spent / allocated) * 100) })),
+  totals: budgetRows.reduce((t, [, a, s]) => ({ allocated: t.allocated + a, spent: t.spent + s, remaining: t.remaining + a - s }), { allocated: 0, spent: 0, remaining: 0 }),
+};
+
+export const SPONSORS = [
+  { name: "Shopify", stage: "negotiating", amount: "2000.00", tier: "Gold", lastContactAt: new Date(NOW - 6 * DAY), deliverables: [] },
+  { name: "Vultr", stage: "confirmed", amount: "1500.00", tier: "Silver", lastContactAt: new Date(NOW - 2 * DAY), deliverables: [{ title: "Logo on website", done: true }, { title: "Social mention", done: false }, { title: "Booth table", done: false }] },
+  { name: "TigerData", stage: "contacted", amount: null, tier: null, lastContactAt: new Date(NOW - 9 * DAY), deliverables: [] },
+  { name: "GoDaddy", stage: "replied", amount: "1000.00", tier: "Bronze", lastContactAt: new Date(NOW - 1 * DAY), deliverables: [] },
+  { name: "Local Bakery", stage: "lead", amount: null, tier: null, lastContactAt: null, deliverables: [] },
+];
+
+const avatar = (i: number) => `https://cdn.discordapp.com/embed/avatars/${i}.png`;
+export const TASKS = [
+  { id: "t1", title: "Confirm judge list", status: "in_progress", ownerName: "Alex", ownerDiscordId: null, dueAt: new Date(NOW - 5 * HOUR), overdue: true, avatarUrl: avatar(1) },
+  { id: "t2", title: "Print name badges", status: "todo", ownerName: "Sam", ownerDiscordId: null, dueAt: new Date(NOW + 4 * HOUR), overdue: false, avatarUrl: avatar(2) },
+  { id: "t3", title: "Book A/V for closing ceremony", status: "blocked", ownerName: "Jordan", ownerDiscordId: null, dueAt: new Date(NOW + 30 * HOUR), overdue: false, avatarUrl: avatar(3) },
+  { id: "t4", title: "Send Shopify booth requirements", status: "todo", ownerName: "Sam", ownerDiscordId: null, dueAt: new Date(NOW + 4 * DAY), overdue: false, avatarUrl: avatar(2) },
+  { id: "t5", title: "Order late-night pizza", status: "done", ownerName: "Fayez", ownerDiscordId: null, dueAt: new Date(NOW - 2 * HOUR), overdue: false },
+];
+
+// Nov 7 2026 in Toronto (EST, UTC-5).
+const DAY_START = Date.UTC(2026, 10, 7, 5);
+const at = (h: number, m = 0) => new Date(DAY_START + h * HOUR + m * MIN).toISOString();
+export const EVENTS = [
+  { title: "Doors + check-in", start: at(9), end: at(10), location: "Atrium" },
+  { title: "Opening ceremony", start: at(10), end: at(11), location: "Main hall", htmlLink: "https://calendar.google.com/calendar/event?eid=opening" },
+  { title: "Lunch", start: at(12), end: at(13), location: "Cafeteria" },
+  { title: "Sponsor fair", start: at(13), end: at(16), location: "Atrium" },
+  { title: "Gemini API workshop", start: at(14), end: at(15), location: "Room 204", htmlLink: "https://calendar.google.com/calendar/event?eid=gemini" },
+  { title: "Dinner", start: at(18), end: at(19), location: "Cafeteria" },
+  { title: "Midnight snack", start: at(23, 30), end: at(24), location: "Atrium" },
+];
+
 export function fixtures(): Fixture[] {
   const channels = { announcements: "000000000000000010", ops: "000000000000000011" };
   return [
@@ -116,6 +153,10 @@ export function fixtures(): Fixture[] {
         ],
       }),
     },
+    { name: "budget", card: budgetCard({ ...BUDGET, sheetUrl: "https://docs.google.com/spreadsheets/d/example", syncedAt: NOW - 20 * MIN }) },
+    { name: "sponsors", card: sponsorsCard({ sponsors: SPONSORS, now: NOW }) },
+    { name: "tasks", card: tasksCard({ tasks: TASKS, now: NOW }) },
+    { name: "calendar", card: calendarCard({ events: EVENTS, dayStart: DAY_START, now: NOW, timeZone: "America/Toronto", calendarUrl: "https://calendar.google.com/calendar" }) },
     { name: "activity", card: activityCard({ agent: "finance", emoji: "💸", title: "Log $84.20 to Food (Pizza Nova)", who: "Fayez", link: { url: "https://docs.google.com/spreadsheets/d/example", label: "Open sheet" } }) },
   ];
 }

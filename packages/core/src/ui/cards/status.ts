@@ -34,7 +34,7 @@ export function statusCard(input: {
     title: TITLES[input.status] ?? input.status,
     blocks: [
       text(quote(input.request, 200)),
-      ...(steps.length ? [text(`\`${progress(finished, steps.length)}\` ${finished}/${steps.length} steps`), text(lines.join("\n"))] : []),
+      ...(steps.length ? [text(`${progress(finished, steps.length)}  ${finished}/${steps.length} steps`), text(lines.join("\n"))] : []),
       ...(input.note ? [text(input.note)] : []),
     ],
     actions: input.dashboardUrl ? [[{ kind: "link", url: input.dashboardUrl, label: "Open run" }]] : undefined,

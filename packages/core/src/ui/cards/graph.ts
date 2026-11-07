@@ -27,8 +27,10 @@ export function planGraphSpec(plan: Plan, status?: Record<string, NodeStatus>): 
     type: "stepGraph",
     nodes: plan.steps.map((s, i) => {
       const a = agentMeta(s.agent);
+      // Long labels ("Sponsorship outreach") lose to the node width; the last word reads fine.
+      const short = a.label.length > 14 ? a.label.split(" ").at(-1)!.replace(/^./, (c) => c.toUpperCase()) : a.label;
       return {
-        id: s.id, label: `${i + 1}. ${a.label}`, color: a.color, level: d.get(s.id) ?? 0,
+        id: s.id, label: `${i + 1}. ${short}`, detail: s.instruction, color: a.color, level: d.get(s.id) ?? 0,
         locked: s.needsApproval, disabled: !s.enabled, status: s.enabled ? status?.[s.id] : "skipped",
       };
     }),

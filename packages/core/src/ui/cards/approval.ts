@@ -49,7 +49,7 @@ function expenseBlocks(args: Record<string, unknown>, ctx?: ApprovalContext): Bl
         const after = b.spent + amount;
         const pct = b.allocated ? Math.round((after / b.allocated) * 100) : 0;
         const warn = pct > 95 ? " :tether_failed: over budget" : pct > 80 ? " ⚠️ nearly spent" : "";
-        return `**${b.category}** ${fmtMoney(b.spent)} → **${fmtMoney(after)}** of ${fmtMoney(b.allocated)}\n\`${progress(after, b.allocated, 10)}\` ${pct}%${warn}`;
+        return `**${b.category}** ${fmtMoney(b.spent)} → **${fmtMoney(after)}** of ${fmtMoney(b.allocated)}\n${progress(after, b.allocated, 10)}  ${pct}%${warn}`;
       })()
     : "";
   if (args.receiptUrl) {
