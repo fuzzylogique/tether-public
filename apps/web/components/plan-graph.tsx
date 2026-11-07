@@ -1,4 +1,5 @@
 import type { Plan } from "@tether/core";
+import { AgentName, StatusPill } from "./ui";
 
 function levelsOf(plan: Plan) {
   const enabled = plan.steps.filter((s) => s.enabled);
@@ -19,22 +20,25 @@ function levelsOf(plan: Plan) {
 export function PlanGraph({ plan, stepStatus, colors }: { plan: Plan; stepStatus: Record<string, string>; colors: Record<string, string> }) {
   const lv = levelsOf(plan);
   return (
-    <div className="flex gap-6 overflow-x-auto py-2">
+    <div className="flex gap-6 overflow-x-auto py-1">
       {lv.map((level, i) => (
-        <div key={i} className="flex flex-col gap-3 min-w-56">
-          <div className="muted text-xs uppercase tracking-wide">Level {i + 1}{level.length > 1 ? " · parallel" : ""}</div>
+        <div key={i} className="flex flex-col gap-3 min-w-60">
+          <div className="label">Level {i + 1}{level.length > 1 ? " · parallel" : ""}</div>
           {level.map((s) => (
-            <div key={s.id} className="panel p-3 text-sm" style={{ borderLeft: `3px solid ${colors[s.agent] ?? "var(--accent)"}`, borderRadius: 10 }}>
-              <div className="flex justify-between"><span className="font-medium">{s.agent}</span><span className="muted text-xs">{stepStatus[s.id] ?? "pending"}</span></div>
-              <div className="muted mt-1">{s.instruction}</div>
-              {s.dependsOn.length > 0 && <div className="text-xs mt-1" style={{ color: "var(--accent)" }}>after {s.dependsOn.join(", ")}</div>}
+            <div key={s.id} className="border rule p-3 text-sm" style={{ background: "var(--paper)", borderRadius: "var(--radius)" }}>
+              <div className="flex justify-between items-center gap-3">
+                <AgentName name={s.agent} color={colors[s.agent]} />
+                <StatusPill status={stepStatus[s.id] ?? "pending"} />
+              </div>
+              <div className="muted mt-2">{s.instruction}</div>
+              {s.dependsOn.length > 0 && <div className="label mt-2">after {s.dependsOn.join(", ")}</div>}
             </div>
           ))}
         </div>
       ))}
       {plan.steps.some((s) => !s.enabled) && (
-        <div className="min-w-56">
-          <div className="muted text-xs uppercase tracking-wide">Removed by organizer</div>
+        <div className="min-w-60">
+          <div className="label">Removed by organizer</div>
           {plan.steps.filter((s) => !s.enabled).map((s) => <div key={s.id} className="muted text-sm line-through mt-2">{s.agent}: {s.instruction}</div>)}
         </div>
       )}

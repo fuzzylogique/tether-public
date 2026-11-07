@@ -5,23 +5,23 @@ export async function Nav() {
   const user = await currentUser();
   const links = [["/", "Overview"], ["/approvals", "Approvals"], ["/runs", "Runs"], ["/agents", "Agents & policies"]];
   return (
-    <header className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "var(--border)" }}>
-      <div className="flex items-center gap-8">
-        <Link href="/" className="font-semibold tracking-tight text-lg">
-          <span style={{ color: "var(--accent)" }}>●</span> Tether
+    <header className="border-b-2" style={{ borderColor: "var(--rule-strong)" }}>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-x-10 gap-y-3">
+        <Link href="/" className="font-display text-2xl font-semibold">
+          Tether<span style={{ color: "var(--accent)" }}>.</span>
         </Link>
-        <nav className="flex gap-5 text-sm">
-          {links.map(([href, label]) => <Link key={href} href={href} className="muted hover:text-white">{label}</Link>)}
+        <nav className="order-last md:order-none w-full md:w-auto md:mr-auto flex gap-6 text-sm overflow-x-auto whitespace-nowrap">
+          {links.map(([href, label]) => <Link key={href} href={href} className="nav-link">{label}</Link>)}
         </nav>
-      </div>
-      <div className="flex items-center gap-3 text-sm">
-        {user ? (
-          <>
-            <span className="pill">{user.roles.join(", ")}</span>
-            <span>{user.name}</span>
-            {authConfigured && <a href="/auth/logout" className="muted">Sign out</a>}
-          </>
-        ) : <a href="/auth/login">Sign in</a>}
+        <div className="flex items-center gap-4 text-sm">
+          {user ? (
+            <>
+              <span className="label">{user.roles.join(", ")}</span>
+              <span className="hidden sm:inline">{user.name}</span>
+              {authConfigured && <a href="/auth/logout" className="muted link">Sign out</a>}
+            </>
+          ) : <a href="/auth/login" className="link">Sign in</a>}
+        </div>
       </div>
     </header>
   );
