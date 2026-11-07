@@ -12,6 +12,13 @@ const schema = z.object({
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
   INNGEST_DEV: z.string().optional(),
+  // Cron monitors (monitor-tasks, poll-sponsor-mail) register only when this is "1".
+  // Exactly one process per shared DB/Gmail account may set it.
+  TETHER_RUN_CRONS: z.string().optional(),
+  MONITOR_TASKS_CRON: z.string().default("*/15 * * * *"),
+  MONITOR_MAIL_CRON: z.string().default("*/2 * * * *"),
+  NUDGE_INTERVAL_MIN: z.coerce.number().int().positive().default(120),
+  ESCALATE_AFTER_NUDGES: z.coerce.number().int().min(1).default(2),
   DISCORD_TOKEN: z.string().default(""),
   DISCORD_CLIENT_ID: z.string().default(""),
   DISCORD_DEV_GUILD_ID: z.string().default(""),

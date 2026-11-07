@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { and, eq, ilike } from "drizzle-orm";
 import { defineTool } from "./types.js";
-import { sponsors, sponsorThreads } from "../db/schema.js";
+import { processedMail, sponsors, sponsorThreads } from "../db/schema.js";
 import { createDraft, searchMail, sendEmail } from "../google/gmail.js";
 
 export const listSponsors = defineTool({
@@ -72,6 +72,12 @@ export const sendSponsorEmail = defineTool({
         await ctx.db.insert(sponsorThreads).values({ orgId: ctx.org.id, sponsorId: s.id, gmailThreadId: sent.threadId, lastMessageId: sent.messageId, lastDirection: "outbound", lastSnippet: args.subject })
           .onConflictDoUpdate({ target: sponsorThreads.gmailThreadId, set: { lastMessageId: sent.messageId, lastDirection: "outbound", lastSnippet: args.subject, updatedAt: new Date() } });
       }
+    }
+    // `lastMessageId` is informational only; inbound dedup is the processed_mail primary key
+    // (see inngest/functions/monitors.ts). Mark our own outbound id as processed too, so the
+    // poller can never treat the organizer's reply as a new inbound message.
+    if (sent.messageId && sent.threadId) {
+      await ctx.db.insert(processedMail).values({ messageId: sent.messageId, orgId: ctx.org.id, threadId: sent.threadId }).onConflictDoNothing();
     }
     return sent;
   },
