@@ -39,7 +39,7 @@ finance, outreach, socials, calendar, coordination, helpdesk, builder (stretch).
 `policies` table: (org, tool, condition, decision). Defaults in `policy/defaults.ts`. Loosening requires the lead role.
 
 ## Data
-Tiger Cloud Postgres. `runs/steps/actions/events` are hypertables. `documents` uses pgvector + pg_textsearch hybrid search. Mirror tables: `budget_lines`, `expenses`, `income`, `sponsors`, `sponsor_threads`, `tasks`, `calendar_events`.
+Tiger Cloud Postgres. `events` is a hypertable with the `agent_activity_hourly` continuous aggregate on top. `documents` uses pgvector + pg_textsearch hybrid search. Mirror tables: `budget_lines`, `expenses`, `income`, `sponsors`, `sponsor_threads`, `tasks`, `calendar_events`.
 
 ### Finance sheet
 `pnpm sheet:create` builds (or upgrades) the org Google Sheet from the mirror; re-running it adds missing tabs and rewrites headers and formulas.
@@ -47,6 +47,11 @@ Tiger Cloud Postgres. `runs/steps/actions/events` are hypertables. `documents` u
 - `Expenses`: Date, Category, Amount (total incl. tax), Vendor, Description, Receipt (Vultr Object Storage URL), Logged by, Tax, Paid by, Reimbursement (`pending`/`paid`). Columns are only ever appended so older sheets keep syncing.
 - `Income`: Date, Source, Amount, Status (`pledged`/`invoiced`/`received`), Notes. Sponsor money goes here via `log_income`, never into Expenses.
 - `Summary`: formulas only (per-category spend, totals, HST paid, income, net position, reimbursements owed per person). Organizers can edit the data tabs by hand and `sync_budget_from_sheet` validates every cell before replacing the mirror in one transaction.
+
+**Schema push on the shared DB.** The Drizzle schema (`packages/core/src/db/schema.ts`) owns tables, columns, foreign keys and indexes; `packages/core/sql/tiger.sql` owns everything Timescale-specific (extensions, `create_hypertable`, the continuous aggregate and its refresh policy, the HNSW and BM25 indexes). `pnpm db:push` runs `tiger.sql`'s extension block, then `src/db/push.ts`, then the rest of `tiger.sql`. Rules that keep the two from fighting:
+- Timescale objects are declared in the Drizzle schema so drizzle-kit sees them as already present instead of "unknown, drop it": the continuous aggregate is a `pgView(...).existing()` (Postgres reports a continuous aggregate as a plain view, and `DROP VIEW` on one is an error), `events_time_idx` (created by `create_hypertable`) and `documents_bm25_idx` are declared as indexes. On a fresh DB drizzle creates `events_time_idx` first and `create_hypertable` skips its default index.
+- `src/db/push.ts` replaces `drizzle-kit push`, which exits 0 on a failed statement. It plans through drizzle-kit's API, refuses to run at all if the plan touches a protected object (`PROTECTED_OBJECTS` in `src/db/drizzleFilters.ts`), holds back destructive statements (DROP, DROP COLUMN, type changes, TRUNCATE) unless `--allow-destructive` is passed, and exits 1 listing any statement that failed. `pnpm db:plan` prints the plan without executing. Because the DB is shared between branches, destructive statements usually mean "another branch's columns", not drift to fix.
+- `events` has no foreign keys on purpose: chunks are dropped by retention and the stream must never block a run.
 
 ## Infra
 Vultr VM → Docker Compose (server, web, caddy). Inngest Cloud. Auth0 for dashboard + roles. Single organizer Google account (refresh token). GoDaddy domain → Caddy.

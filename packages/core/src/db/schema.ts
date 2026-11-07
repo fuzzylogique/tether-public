@@ -1,7 +1,6 @@
 import {
-  pgTable, uuid, text, timestamp, jsonb, integer, numeric, boolean, index, vector, primaryKey,
+  pgTable, pgView, uuid, text, timestamp, jsonb, integer, bigint, numeric, boolean, index, vector, primaryKey,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 // ---------- Tenancy & identity ----------
 export const orgs = pgTable("orgs", {
@@ -27,7 +26,7 @@ export const users = pgTable("users", {
   auth0Sub: text("auth0_sub"),
   email: text("email"),
   name: text("name"),
-  roles: text("roles").array().default(sql`'{organizer}'::text[]`).notNull(),
+  roles: text("roles").array().default(["organizer"]).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [index("users_org_discord_idx").on(t.orgId, t.discordId)]);
 
@@ -116,7 +115,8 @@ export const policies = pgTable("policies", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// Audit / activity stream. Hypertable on Tiger (see sql/tiger.sql).
+// Audit / activity stream. Hypertable on Tiger (see sql/tiger.sql). No foreign keys on purpose:
+// chunks are dropped by retention, and the stream must never block a run on a missing parent row.
 export const events = pgTable("events", {
   time: timestamp("time", { withTimezone: true }).defaultNow().notNull(),
   orgId: uuid("org_id").notNull(),
@@ -124,7 +124,23 @@ export const events = pgTable("events", {
   kind: text("kind").notNull(),
   agent: text("agent"),
   data: jsonb("data").$type<Record<string, unknown>>().default({}).notNull(),
-}, (t) => [index("events_org_time_idx").on(t.orgId, t.time)]);
+}, (t) => [
+  index("events_org_time_idx").on(t.orgId, t.time),
+  // `create_hypertable` creates this default index (time DESC). Declaring it here keeps drizzle-kit from
+  // dropping it as "unknown"; on a fresh DB drizzle creates it first and create_hypertable skips its own.
+  index("events_time_idx").on(t.time.desc().nullsFirst()),
+]);
+
+// Timescale continuous aggregate over `events`, created in sql/tiger.sql. Postgres exposes it as a plain
+// view (relkind `v`), so it is declared as an *existing* pgView: drizzle-kit must never create, alter or
+// drop it (`DROP VIEW` on a continuous aggregate is an error, and it would take the dashboard chart with it).
+export const agentActivityHourly = pgView("agent_activity_hourly", {
+  bucket: timestamp("bucket", { withTimezone: true }).notNull(),
+  orgId: uuid("org_id").notNull(),
+  agent: text("agent"),
+  kind: text("kind").notNull(),
+  n: bigint("n", { mode: "number" }).notNull(),
+}).existing();
 
 // Tier 1 persistent agent sessions bound to a Discord thread
 export const agentSessions = pgTable("agent_sessions", {
@@ -202,7 +218,8 @@ export const sponsors = pgTable("sponsors", {
 export const sponsorThreads = pgTable("sponsor_threads", {
   id: uuid("id").primaryKey().defaultRandom(),
   orgId: uuid("org_id").references(() => orgs.id).notNull(),
-  sponsorId: uuid("sponsor_id").references(() => sponsors.id),
+  // A thread outlives its sponsor row: seed/reset delete and re-insert sponsors, so detach instead of failing.
+  sponsorId: uuid("sponsor_id").references(() => sponsors.id, { onDelete: "set null" }),
   gmailThreadId: text("gmail_thread_id").notNull().unique(),
   lastMessageId: text("last_message_id"),
   lastDirection: text("last_direction"), // inbound | outbound
@@ -261,7 +278,12 @@ export const documents = pgTable("documents", {
   content: text("content").notNull(),
   embedding: vector("embedding", { dimensions: 768 }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (t) => [index("documents_embedding_idx").using("hnsw", t.embedding.op("vector_cosine_ops"))]);
+}, (t) => [
+  index("documents_embedding_idx").using("hnsw", t.embedding.op("vector_cosine_ops")),
+  // BM25 index from pg_textsearch (Tiger Cloud). sql/tiger.sql also creates it, guarded, for DBs without the
+  // extension; declaring it here stops drizzle-kit from dropping it as "unknown".
+  index("documents_bm25_idx").using("bm25", t.content.op("text_bm25_ops")).with({ text_config: "english" }),
+]);
 
 // ---------- Brand kit (socials) ----------
 export const brandKits = pgTable("brand_kits", {
@@ -275,6 +297,6 @@ export const brandKits = pgTable("brand_kits", {
 });
 
 export const schema = {
-  orgs, users, runs, steps, actions, policies, events, agentSessions,
+  orgs, users, runs, steps, actions, policies, events, agentActivityHourly, agentSessions,
   budgetLines, expenses, sponsors, sponsorThreads, processedMail, tasks, calendarEvents, documents, brandKits,
 };

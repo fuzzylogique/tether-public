@@ -14,6 +14,7 @@
     "typecheck": "pnpm -r typecheck",
     "db:generate": "pnpm --filter @tether/core db:generate",
     "db:push": "pnpm --filter @tether/core db:push",
+    "db:plan": "pnpm --filter @tether/core db:plan",
     "db:seed": "pnpm --filter @tether/core db:seed",
     "demo:reset": "pnpm --filter @tether/core demo:reset",
     "discord:register": "pnpm --filter @tether/server discord:register",
