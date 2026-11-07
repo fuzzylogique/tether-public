@@ -32,6 +32,9 @@ SELECT add_continuous_aggregate_policy('agent_activity_hourly',
 -- Vector index (idempotent; drizzle may skip it on first push)
 CREATE INDEX IF NOT EXISTS documents_embedding_idx ON documents USING hnsw (embedding vector_cosine_ops);
 
+-- Inbound-mail dedup lookup index (idempotent; drizzle-kit push skipped it on the shared DB)
+CREATE INDEX IF NOT EXISTS processed_mail_org_thread_idx ON processed_mail (org_id, thread_id);
+
 -- BM25 index for hybrid search (no-op if pg_textsearch missing)
 DO $$ BEGIN
   EXECUTE 'CREATE INDEX IF NOT EXISTS documents_bm25_idx ON documents USING bm25 (content) WITH (text_config = ''english'')';

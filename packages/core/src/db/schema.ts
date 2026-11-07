@@ -186,6 +186,15 @@ export const sponsorThreads = pgTable("sponsor_threads", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Gmail message ids the inbound poller has already dispatched. Primary key on message_id is the
+// dedup guarantee: `insert ... on conflict do nothing returning` wins exactly once per message.
+export const processedMail = pgTable("processed_mail", {
+  messageId: text("message_id").primaryKey(),
+  orgId: uuid("org_id").references(() => orgs.id).notNull(),
+  threadId: text("thread_id").notNull(),
+  seenAt: timestamp("seen_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [index("processed_mail_org_thread_idx").on(t.orgId, t.threadId)]);
+
 export type TaskStatus = "todo" | "in_progress" | "done" | "blocked";
 
 export const tasks = pgTable("tasks", {
@@ -238,5 +247,5 @@ export const brandKits = pgTable("brand_kits", {
 
 export const schema = {
   orgs, users, runs, steps, actions, policies, events, agentSessions,
-  budgetLines, expenses, sponsors, sponsorThreads, tasks, calendarEvents, documents, brandKits,
+  budgetLines, expenses, sponsors, sponsorThreads, processedMail, tasks, calendarEvents, documents, brandKits,
 };
