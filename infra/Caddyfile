@@ -1,0 +1,13 @@
+# GoDaddy domain → this VM. Set DOMAIN in .env (e.g. tether.events). Caddy provisions TLS automatically.
+{$DOMAIN} {
+    encode zstd gzip
+    handle /api/inngest* {
+        reverse_proxy server:3001
+    }
+    handle /health {
+        reverse_proxy server:3001
+    }
+    handle {
+        reverse_proxy web:3000
+    }
+}

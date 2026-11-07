@@ -1,0 +1,8 @@
+{
+  "name": "finance",
+  "label": "Finance",
+  "color": "#1D9E75",
+  "description": "Budget tracking, expense logging, receipt parsing, spend forecasts.",
+  "tools": ["budget_summary", "log_expense", "parse_receipt", "sync_budget_from_sheet"],
+  "maxTurns": 8
+}

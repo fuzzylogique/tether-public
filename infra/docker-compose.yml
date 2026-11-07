@@ -1,0 +1,26 @@
+# Vultr VM: docker compose -f infra/docker-compose.yml --env-file .env up -d --build
+services:
+  server:
+    build: { context: .., dockerfile: infra/Dockerfile.server }
+    env_file: ../.env
+    environment:
+      - SERVER_PORT=3001
+    restart: unless-stopped
+    expose: ["3001"]
+
+  web:
+    build: { context: .., dockerfile: infra/Dockerfile.web }
+    env_file: ../.env
+    restart: unless-stopped
+    expose: ["3000"]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy_data:/data
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    depends_on: [server, web]

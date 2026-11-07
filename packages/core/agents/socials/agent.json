@@ -1,0 +1,8 @@
+{
+  "name": "socials",
+  "label": "Socials",
+  "color": "#D4537E",
+  "description": "Post copy, hero images, announcements.",
+  "tools": ["generate_post_copy", "generate_hero_image", "post_announcement"],
+  "maxTurns": 6
+}

@@ -1,0 +1,8 @@
+{
+  "name": "calendar",
+  "label": "Calendar",
+  "color": "#378ADD",
+  "description": "Scheduling, conflicts, invitations.",
+  "tools": ["list_events", "create_event", "find_conflicts"],
+  "maxTurns": 6
+}

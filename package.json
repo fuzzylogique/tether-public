@@ -2,7 +2,9 @@
   "name": "tether",
   "private": true,
   "packageManager": "pnpm@10.18.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "dev:server": "pnpm --filter @tether/server dev",
@@ -15,5 +17,13 @@
     "db:seed": "pnpm --filter @tether/core db:seed",
     "discord:register": "pnpm --filter @tether/server discord:register",
     "eval:plans": "pnpm --filter @tether/core eval:plans"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@google/genai",
+      "protobufjs",
+      "sharp"
+    ]
   }
 }

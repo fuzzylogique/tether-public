@@ -1,0 +1,8 @@
+{
+  "name": "helpdesk",
+  "label": "Helpdesk",
+  "color": "#888780",
+  "description": "Answers participant questions from the FAQ, schedule, and rules.",
+  "tools": ["search_docs", "escalate_to_organizer"],
+  "maxTurns": 4
+}
