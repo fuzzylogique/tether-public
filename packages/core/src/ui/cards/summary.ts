@@ -20,7 +20,9 @@ export function summaryCard(input: {
   for (const s of ran) {
     const a = agentMeta(s.agent);
     blocks.push(sep());
-    blocks.push(text(`### ${statusEmoji(s.status)} ${a.emoji} ${a.label}\n${truncate((s.output ?? "").trim() || "_(no output)_", per)}`));
+    // NEEDS_PLAN is the agents' escalation protocol (plans.ts), not something to show people.
+    const output = (s.output ?? "").replace(/^\s*NEEDS_PLAN:.*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+    blocks.push(text(`### ${statusEmoji(s.status)} ${a.emoji} ${a.label}\n${truncate(output || "_(no output)_", per)}`));
   }
   if (input.plan.steps.length > 1) {
     const status = Object.fromEntries(input.steps.map((s) => [s.id, s.status]));

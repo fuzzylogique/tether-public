@@ -8,9 +8,14 @@ const STATUS_COLOR: Record<string, string> = { done: GREEN, failed: RED, running
 export function stepGraph(spec: StepGraphSpec) {
   const W = 1200, nodeH = 96, rowGap = 26, colGap = 70;
   const head = title(spec.title, W);
-  const cols = Math.max(1, ...spec.nodes.map((x) => x.level + 1));
+  // With no dependencies at all (one level), a single tall column wastes the card: lay the
+  // independent steps out side by side instead, wrapping at three per row.
+  const flat = spec.nodes.length > 1 && spec.nodes.every((x) => x.level === 0);
+  const perRow = Math.min(3, spec.nodes.length);
+  const levelOf = (x: StepGraphSpec["nodes"][number], i: number) => (flat ? i % perRow : x.level);
+  const cols = flat ? perRow : Math.max(1, ...spec.nodes.map((x) => x.level + 1));
   const byLevel: StepGraphSpec["nodes"][] = Array.from({ length: cols }, () => []);
-  for (const node of spec.nodes) byLevel[node.level]!.push(node);
+  for (const [i, node] of spec.nodes.entries()) byLevel[levelOf(node, i)]!.push(node);
   const rows = Math.max(1, ...byLevel.map((l) => l.length));
   const nodeW = Math.min(330, (W - CHART.pad * 2 - (cols - 1) * colGap) / cols);
   const gridW = cols * nodeW + (cols - 1) * colGap;
@@ -21,7 +26,7 @@ export function stepGraph(spec: StepGraphSpec) {
 
   const pos = new Map<string, { x: number; y: number }>();
   for (const [c, level] of byLevel.entries()) {
-    const y0 = top + (colH(rows) - colH(level.length)) / 2;
+    const y0 = flat ? top : top + (colH(rows) - colH(level.length)) / 2;
     for (const [r, node] of level.entries()) pos.set(node.id, { x: left + c * (nodeW + colGap), y: y0 + r * (nodeH + rowGap) });
   }
 

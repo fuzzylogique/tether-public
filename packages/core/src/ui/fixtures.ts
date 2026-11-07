@@ -153,6 +153,23 @@ export function fixtures(): Fixture[] {
         ],
       }),
     },
+    {
+      name: "summary-parallel", card: summaryCard({
+        runId: "0b1c2d3e-0000-4000-8000-000000000002", request: "Status check: budget left, sponsor pipeline, and anything overdue?", status: "failed", finishedAt: NOW,
+        plan: { summary: "Status check across finance, outreach and coordination", steps: [
+          { id: "s1", agent: "finance", instruction: "Summarize budget left per category.", dependsOn: [], needsApproval: false, enabled: true },
+          { id: "s2", agent: "outreach", instruction: "List sponsors not contacted in 5 days.", dependsOn: [], needsApproval: false, enabled: true },
+          { id: "s3", agent: "coordination", instruction: "List overdue tasks and owners.", dependsOn: [], needsApproval: false, enabled: true },
+          { id: "s4", agent: "calendar", instruction: "List today's remaining events.", dependsOn: [], needsApproval: false, enabled: true },
+        ] },
+        steps: [
+          { id: "s1", agent: "finance", status: "done", output: "**$5,860 left** of $11,600. Venue is at 98% and Marketing at 87%." },
+          { id: "s2", agent: "outreach", status: "done", output: "Shopify (6 days) and TigerData (9 days) need a follow-up.\nNEEDS_PLAN: draft follow-ups for both" },
+          { id: "s3", agent: "coordination", status: "done", output: "1 overdue: *Confirm judge list* (Alex, 5 hours late)." },
+          { id: "s4", agent: "calendar", status: "failed", output: "Failed: no calendar configured" },
+        ],
+      }),
+    },
     { name: "budget", card: budgetCard({ ...BUDGET, sheetUrl: "https://docs.google.com/spreadsheets/d/example", syncedAt: NOW - 20 * MIN }) },
     { name: "sponsors", card: sponsorsCard({ sponsors: SPONSORS, now: NOW }) },
     { name: "tasks", card: tasksCard({ tasks: TASKS, now: NOW }) },
