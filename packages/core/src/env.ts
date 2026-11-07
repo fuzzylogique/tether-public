@@ -4,7 +4,7 @@ const schema = z.object({
   NODE_ENV: z.string().default("development"),
   DATABASE_URL: z.string().default(""),
   GEMINI_API_KEY: z.string().default(""),
-  GEMINI_MODEL_PLANNER: z.string().default("gemini-pro-latest"),
+  GEMINI_MODEL_PLANNER: z.string().default("gemini-3.8-flash"),
   GEMINI_MODEL_AGENT: z.string().default("gemini-3.8-flash"),
   GEMINI_MODEL_IMAGE: z.string().default("gemini-3.1-flash-image"),
   GEMINI_MODEL_EMBED: z.string().default("gemini-embedding-001"),

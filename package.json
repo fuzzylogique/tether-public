@@ -18,7 +18,8 @@
     "discord:register": "pnpm --filter @tether/server discord:register",
     "eval:plans": "pnpm --filter @tether/core eval:plans",
     "google:auth": "pnpm --filter @tether/core google:auth",
-    "env:check": "pnpm --filter @tether/core env:check"
+    "env:check": "pnpm --filter @tether/core env:check",
+    "sheet:create": "pnpm --filter @tether/core sheet:create"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
