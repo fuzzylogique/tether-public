@@ -30,3 +30,8 @@ export async function updateRow(sheetId: string, tab: string, rowNumber: number,
 export async function clearRow(sheetId: string, tab: string, rowNumber: number) {
   await sheetsApi().spreadsheets.values.clear({ spreadsheetId: sheetId, range: `${tab}!A${rowNumber}:Z${rowNumber}` });
 }
+
+/** Write a block of values at an A1 range (e.g. `Expenses!J7` for a single cell). */
+export async function updateRange(sheetId: string, range: string, values: (string | number)[][]) {
+  await sheetsApi().spreadsheets.values.update({ spreadsheetId: sheetId, range, valueInputOption: "USER_ENTERED", requestBody: { values } });
+}

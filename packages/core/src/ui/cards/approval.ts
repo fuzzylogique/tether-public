@@ -88,12 +88,14 @@ function bodyFor(a: ActionRef, ctx?: ApprovalContext): Block[] {
     case "send_email":
     case "create_email_draft":
       return emailBlocks(args);
-    case "post_announcement":
+    case "post_announcement": {
+      const urls = [...(args.imageUrl ? [str(args.imageUrl)] : []), ...(Array.isArray(args.imageUrls) ? (args.imageUrls as unknown[]).map(str) : [])].slice(0, 4);
       return [
-        kv([["Channel", channel(ctx, "announcements")]]),
+        kv([["Channel", channel(ctx, "announcements")], ...(urls.length ? [["Images", String(urls.length)] as [string, string]] : [])]),
         text(blockquote(str(args.text), 1800)),
-        ...(args.imageUrl ? [{ kind: "gallery", items: [{ url: str(args.imageUrl), alt: "hero image" }] } as Block] : []),
+        ...(urls.length ? [{ kind: "gallery", items: urls.map((url, i) => ({ url, alt: urls.length === 1 ? "hero image" : `photo ${i + 1}` })) } as Block] : []),
       ];
+    }
     case "log_expense":
       return expenseBlocks(args, ctx);
     case "create_event":

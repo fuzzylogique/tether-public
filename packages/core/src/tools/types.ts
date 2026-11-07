@@ -60,7 +60,23 @@ export interface Notifier {
   /** Re-render a message the adapter posted earlier (approval card after a decision, etc.). */
   editMessage(input: { channelId: string; messageId: string } & MessageBody): Promise<void>;
   dm(input: { discordId: string } & MessageBody): Promise<void>;
+  /** Recent image attachments in a channel, newest first (event photos the team dropped in #photos). */
+  listChannelImages(input: { channelId: string; limit?: number }): Promise<ChannelImage[]>;
 }
+
+export type ChannelImage = {
+  url: string;
+  /** Discord's media proxy URL; accepts ?width=&height= for server-side downscaling. */
+  proxyUrl?: string;
+  contentType?: string;
+  name?: string;
+  bytes?: number;
+  width?: number;
+  height?: number;
+  authorName?: string;
+  postedAt: string;
+  messageId: string;
+};
 
 export type RunRef = { id: string; orgId: string; source: Record<string, string | undefined>; request: string };
 export type ActionRef = {

@@ -37,54 +37,70 @@ export const createTask = defineTool({
 
 export const updateTask = defineTool({
   name: "update_task",
-  description: "Update a task's status, owner, or due date by title match.",
-  input: z.object({ title: z.string(), status: z.enum(["todo", "in_progress", "done", "blocked"]).optional(), ownerDiscordId: z.string().optional(), ownerName: z.string().optional(), dueAt: z.string().optional() }),
+  description: "Update a task's status, owner, due date or notes by title match. Moving the due date forward resets the nudge cycle.",
+  input: z.object({
+    title: z.string(), status: z.enum(["todo", "in_progress", "done", "blocked"]).optional(),
+    ownerDiscordId: z.string().optional(), ownerName: z.string().optional(), dueAt: z.string().optional(), notes: z.string().optional(),
+  }),
   effect: "write", risk: "low",
-  summarize: (a) => `Update task "${a.title}"${a.status ? ` → ${a.status}` : ""}`,
+  summarize: (a) => `Update task "${a.title}"${a.status ? ` → ${a.status}` : ""}${a.dueAt ? ` due ${a.dueAt}` : ""}`,
   async execute(args, ctx) {
     const [t] = await ctx.db.select().from(tasks).where(and(eq(tasks.orgId, ctx.org.id), ilike(tasks.title, `%${args.title}%`)));
     if (!t) return { error: "task not found" };
+    const dueAt = args.dueAt ? new Date(args.dueAt) : t.dueAt;
+    const rescheduled = !!args.dueAt && (!t.dueAt || dueAt!.getTime() > t.dueAt.getTime());
+    // A reassigned or rescheduled task starts a fresh nudge cycle; a done task is never nudged again.
+    const reset = rescheduled || (!!args.ownerDiscordId && args.ownerDiscordId !== t.ownerDiscordId);
     await ctx.db.update(tasks).set({
       status: args.status ?? t.status, ownerDiscordId: args.ownerDiscordId ?? t.ownerDiscordId, ownerName: args.ownerName ?? t.ownerName,
-      dueAt: args.dueAt ? new Date(args.dueAt) : t.dueAt,
+      dueAt, notes: args.notes ?? t.notes,
+      ...(reset ? { nudgeCount: 0, lastNudgedAt: null, escalated: false } : {}),
     }).where(eq(tasks.id, t.id));
-    return { id: t.id };
+    return { id: t.id, status: args.status ?? t.status, dueAt: dueAt?.toISOString(), nudgeCycleReset: reset };
   },
 });
 
+/** Marker on every nudge message, so a Discord reply to one can be recognised as an answer. */
+export const NUDGE_PREFIX = "⏰";
+
 export const nudgeOwner = defineTool({
   name: "nudge_owner",
-  description: "Nudge a task owner about an overdue or upcoming task. Posted in the team #tasks channel with an @mention so the whole team sees it.",
+  description: "Nudge a task owner about an overdue or upcoming task. Posted in the team #tasks channel with an @mention (or a DM when there is no #tasks channel). The owner can answer the message with an ETA, 'done' or 'can't'; Tether reads the reply.",
   input: z.object({ discordId: z.string(), message: z.string(), taskTitle: z.string().optional() }),
   effect: "external", risk: "medium",
   summarize: (a) => `Nudge <@${a.discordId}>: ${a.message.slice(0, 80)}`,
   async execute(args, ctx) {
     const channelId = ctx.org.channels["tasks"];
-    if (channelId) await ctx.notify.postToChannel({ channelId, text: `⏰ <@${args.discordId}> ${args.message}${args.taskTitle ? `\n-# task: ${args.taskTitle}` : ""}` });
-    else await ctx.notify.dm({ discordId: args.discordId, text: args.message });
-    if (args.taskTitle) {
-      const [t] = await ctx.db.select().from(tasks).where(and(eq(tasks.orgId, ctx.org.id), ilike(tasks.title, `%${args.taskTitle}%`)));
-      if (t) await ctx.db.update(tasks).set({ nudgeCount: t.nudgeCount + 1, lastNudgedAt: new Date() }).where(eq(tasks.id, t.id));
+    const footer = args.taskTitle ? `\n-# task: ${args.taskTitle} · reply to this message with an ETA, "done" or "can't"` : "\n-# reply to this message with an ETA";
+    if (channelId) {
+      const { messageId } = await ctx.notify.postToChannel({ channelId, card: { accent: "#EF9F27", blocks: [{ kind: "text", md: `${NUDGE_PREFIX} <@${args.discordId}> ${args.message}${footer}` }], ping: { users: [args.discordId] } } });
+      return { sent: true, where: "tasks channel", messageId };
     }
-    return { sent: true };
+    await ctx.notify.dm({ discordId: args.discordId, text: `${NUDGE_PREFIX} ${args.message}${footer}` });
+    // The monitor owns nudge_count / last_nudged_at (claimed before this run started); ad-hoc nudges do not count.
+    return { sent: true, where: "dm" };
   },
 });
 
 export const escalate = defineTool({
   name: "escalate",
-  description: "Post an escalation to the ops channel mentioning the lead. Use after nudges went unanswered.",
+  description: "Post an escalation to the ops channel mentioning the lead role. Use after nudges went unanswered or when the owner says they cannot do it.",
   input: z.object({ message: z.string(), taskTitle: z.string().optional() }),
   effect: "external", risk: "medium",
   summarize: (a) => `Escalate: ${a.message.slice(0, 80)}`,
   async execute(args, ctx) {
     const channelId = ctx.org.channels["ops"];
     if (!channelId) return { error: "no ops channel configured" };
-    await ctx.notify.postToChannel({ channelId, text: `⚠️ **Escalation** — ${args.message}` });
+    const lead = ctx.org.roles["lead"];
+    await ctx.notify.postToChannel({
+      channelId,
+      card: { accent: "#E24B4A", blocks: [{ kind: "text", md: `⚠️ **Escalation** ${lead ? `<@&${lead}> ` : ""}— ${args.message}` }], ping: lead ? { roles: [lead] } : undefined },
+    });
     if (args.taskTitle) {
       const [t] = await ctx.db.select().from(tasks).where(and(eq(tasks.orgId, ctx.org.id), ilike(tasks.title, `%${args.taskTitle}%`)));
       if (t) await ctx.db.update(tasks).set({ escalated: true }).where(eq(tasks.id, t.id));
     }
-    return { posted: true };
+    return { posted: true, pingedLead: !!lead };
   },
 });
 

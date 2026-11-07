@@ -1,7 +1,7 @@
 import {
   ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, type Client, type TextBasedChannel,
 } from "discord.js";
-import type { Card, MessageBody, Notifier, Plan } from "@tether/core";
+import type { Card, ChannelImage, MessageBody, Notifier, Plan } from "@tether/core";
 import { agents } from "@tether/core";
 import { approvalEmbed, planEmbed, statusEmbed } from "./embeds.js";
 import { render, renderEdit } from "./ui/render.js";
@@ -129,5 +129,31 @@ export class DiscordNotifier implements Notifier {
   async dm({ discordId, ...body }: Parameters<Notifier["dm"]>[0]) {
     const user = await this.client.users.fetch(discordId);
     await user.send(await payload(body as MessageBody) as never);
+  }
+
+  /** Walk the channel history newest-first and collect image attachments; stops after `limit` images or ~300 messages. */
+  async listChannelImages({ channelId, limit = 24 }: Parameters<Notifier["listChannelImages"]>[0]): Promise<ChannelImage[]> {
+    const ch = await this.client.channels.fetch(channelId);
+    if (!ch || !ch.isTextBased() || !("messages" in ch)) throw new Error(`channel ${channelId} is not text-based`);
+    const out: ChannelImage[] = [];
+    let before: string | undefined;
+    for (let page = 0; page < 3 && out.length < limit; page++) {
+      const batch = await ch.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+      if (!batch.size) break;
+      for (const m of batch.values()) {
+        for (const a of m.attachments.values()) {
+          if (!a.contentType?.startsWith("image/")) continue;
+          out.push({
+            url: a.url, proxyUrl: a.proxyURL, contentType: a.contentType, name: a.name, bytes: a.size,
+            width: a.width ?? undefined, height: a.height ?? undefined,
+            authorName: m.member?.displayName ?? m.author.displayName, postedAt: m.createdAt.toISOString(), messageId: m.id,
+          });
+          if (out.length >= limit) break;
+        }
+        if (out.length >= limit) break;
+      }
+      before = batch.last()?.id;
+    }
+    return out;
   }
 }
