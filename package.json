@@ -16,7 +16,9 @@
     "db:push": "pnpm --filter @tether/core db:push",
     "db:seed": "pnpm --filter @tether/core db:seed",
     "discord:register": "pnpm --filter @tether/server discord:register",
-    "eval:plans": "pnpm --filter @tether/core eval:plans"
+    "eval:plans": "pnpm --filter @tether/core eval:plans",
+    "google:auth": "pnpm --filter @tether/core google:auth",
+    "env:check": "pnpm --filter @tether/core env:check"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
