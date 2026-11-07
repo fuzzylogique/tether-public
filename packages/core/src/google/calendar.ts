@@ -11,6 +11,7 @@ export async function listEvents(calendarId: string, timeMin: string, timeMax: s
     end: e.end?.dateTime ?? e.end?.date ?? "",
     location: e.location ?? undefined,
     attendees: (e.attendees ?? []).map((a) => a.email ?? "").filter(Boolean),
+    htmlLink: e.htmlLink ?? undefined,
   }));
 }
 

@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { and, eq, ilike } from "drizzle-orm";
 import { defineTool } from "./types.js";
-import { sponsors, sponsorThreads } from "../db/schema.js";
+import { processedMail, sponsors, sponsorThreads } from "../db/schema.js";
 import { createDraft, searchMail, sendEmail } from "../google/gmail.js";
+import { inngest } from "../inngest/client.js";
+import { buildInboxDigest } from "../runtime/digest.js";
 
 export const listSponsors = defineTool({
   name: "list_sponsors",
@@ -22,7 +24,7 @@ export const listSponsors = defineTool({
 
 export const updateSponsor = defineTool({
   name: "update_sponsor",
-  description: "Update a sponsor's stage, amount, tier, notes, or deliverables checklist.",
+  description: "Update a sponsor's stage, amount, tier, notes, or deliverables checklist. Moving a sponsor to 'confirmed' starts the sponsor-confirmed workflow (income on the sheet, deliverable tasks, welcome post).",
   input: z.object({
     sponsorName: z.string(),
     stage: z.enum(["lead", "contacted", "replied", "negotiating", "confirmed", "declined"]).optional(),
@@ -40,7 +42,33 @@ export const updateSponsor = defineTool({
       stage: args.stage ?? s.stage, amount: args.amount != null ? args.amount.toFixed(2) : s.amount, tier: args.tier ?? s.tier,
       notes: args.notes ?? s.notes, deliverables: args.deliverables ?? s.deliverables,
     }).where(eq(sponsors.id, s.id)).returning();
-    return { id: updated!.id, stage: updated!.stage };
+    // Deterministic trigger: whoever moved the stage (the mail watcher's agent run or an organizer),
+    // the onboarding workflow fires exactly once per transition into "confirmed".
+    let workflow: string | undefined;
+    if (args.stage === "confirmed" && s.stage !== "confirmed") {
+      await inngest.send({
+        id: `wf-sponsor-confirmed-${s.id}-${Date.now()}`,
+        name: "tether/workflow.triggered",
+        data: {
+          orgId: ctx.org.id, name: "sponsor-confirmed", actorDiscordId: ctx.actor.discordId, actorName: ctx.actor.name,
+          params: { sponsor: updated!.name, amount: updated!.amount ? Number(updated!.amount) : undefined, tier: updated!.tier ?? undefined, contactName: updated!.contactName ?? undefined, deliverables: updated!.deliverables.map((d) => d.title) },
+        },
+      });
+      workflow = "sponsor-confirmed";
+    }
+    return { id: updated!.id, stage: updated!.stage, ...(workflow ? { workflowStarted: workflow } : {}) };
+  },
+});
+
+export const inboxDigest = defineTool({
+  name: "inbox_digest",
+  description: "Summarize the organizer inbox for the last N hours: what needs a reply or a decision, and what is FYI. Read-only.",
+  input: z.object({ hours: z.number().int().positive().max(24 * 14).default(24), query: z.string().optional().describe("Extra Gmail search terms to narrow it, e.g. 'from:shopify.com'") }),
+  effect: "read", risk: "low",
+  summarize: (a) => `Inbox digest for the last ${a.hours}h`,
+  async execute(args) {
+    const d = await buildInboxDigest({ hours: args.hours, query: args.query });
+    return { headline: d.headline, scanned: d.scanned, items: d.items.map((it) => ({ ...it, from: d.mails[it.index - 1]?.from, subject: d.mails[it.index - 1]?.subject })) };
   },
 });
 
@@ -73,6 +101,12 @@ export const sendSponsorEmail = defineTool({
           .onConflictDoUpdate({ target: sponsorThreads.gmailThreadId, set: { lastMessageId: sent.messageId, lastDirection: "outbound", lastSnippet: args.subject, updatedAt: new Date() } });
       }
     }
+    // `lastMessageId` is informational only; inbound dedup is the processed_mail primary key
+    // (see inngest/functions/monitors.ts). Mark our own outbound id as processed too, so the
+    // poller can never treat the organizer's reply as a new inbound message.
+    if (sent.messageId && sent.threadId) {
+      await ctx.db.insert(processedMail).values({ messageId: sent.messageId, orgId: ctx.org.id, threadId: sent.threadId }).onConflictDoNothing();
+    }
     return sent;
   },
 });
@@ -86,4 +120,4 @@ export const searchSponsorReplies = defineTool({
   async execute(args) { return searchMail(args.query, args.max); },
 });
 
-export const outreachTools = [listSponsors, updateSponsor, createEmailDraft, sendSponsorEmail, searchSponsorReplies];
+export const outreachTools = [listSponsors, updateSponsor, createEmailDraft, sendSponsorEmail, searchSponsorReplies, inboxDigest];

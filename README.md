@@ -24,6 +24,8 @@ In Discord: `/tether setup` with your channels, then try `/budget summary`, `/pl
 ## How a request flows
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Short version: Discord → Inngest event → orchestrator drafts a plan → plan card (edit/approve) → executor runs agents in dependency levels → each tool call passes the policy gateway → approval cards for anything risky → status embed updates in place → dashboard shows the trace.
 
+Pre-demo adversarial review (two independent reviewers, Nov 7): [docs/REVIEW.md](docs/REVIEW.md). Start with its ranked top-ten list and the invariant scorecard.
+
 ## Credentials you need
 - **Discord**: bot token + client id, Message Content intent enabled, invited with `applications.commands` and `bot` scopes.
 - **Gemini**: API key from AI Studio.

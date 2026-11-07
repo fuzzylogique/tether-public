@@ -2,9 +2,10 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { defineTool } from "./types.js";
 import { brandKits } from "../db/schema.js";
-import { generateWithRetry, generateStructured } from "../runtime/gemini.js";
+import { generateWithRetry, generateStructured, generateStructuredMultimodal, type Part } from "../runtime/gemini.js";
 import { env } from "../env.js";
-import { putObject } from "../storage.js";
+import { putObject, uploadObject } from "../storage.js";
+import { extensionFor, fetchTrustedMedia } from "../media.js";
 
 const postSchema = z.object({
   headline: z.string().max(60),
@@ -16,7 +17,7 @@ const postSchema = z.object({
 
 export const generatePostCopy = defineTool({
   name: "generate_post_copy",
-  description: "Generate on-brand copy for a social post: headline, caption, hashtags, CTA, and a hero image prompt.",
+  description: "Generate on-brand copy for a social post: headline, caption, hashtags, CTA, and a hero image prompt. Mention the photo captions in the brief when the post uses event photos.",
   input: z.object({ brief: z.string(), platform: z.enum(["instagram", "linkedin", "twitter", "discord"]).default("instagram") }),
   effect: "read", risk: "low",
   summarize: (a) => `Generate ${a.platform} post copy`,
@@ -33,41 +34,149 @@ export const generatePostCopy = defineTool({
 
 export const generateHeroImage = defineTool({
   name: "generate_hero_image",
-  description: "Generate a hero image for a post using the brand palette. Text is NOT rendered in the image; it is overlaid later.",
+  description: "Generate a hero image for a post using the brand palette, when no event photos are available. Text is NOT rendered in the image. Returns skipped:true when image generation is unavailable; carry on without an image.",
   input: z.object({ prompt: z.string(), aspect: z.enum(["1:1", "9:16", "16:9"]).default("1:1") }),
   effect: "write", risk: "low",
   summarize: (a) => `Generate hero image (${a.aspect})`,
   async execute(args, ctx) {
     const [kit] = await ctx.db.select().from(brandKits).where(eq(brandKits.orgId, ctx.org.id));
-    const res = await generateWithRetry({
-      model: env().GEMINI_MODEL_IMAGE,
-      contents: `${args.prompt}. Flat, modern poster background, palette ${kit?.primaryColor ?? "#6D5DF6"} and ${kit?.secondaryColor ?? "#0EA5A4"}, no text, no letters, aspect ${args.aspect}.`,
+    try {
+      const res = await generateWithRetry({
+        model: env().GEMINI_MODEL_IMAGE,
+        contents: `${args.prompt}. Flat, modern poster background, palette ${kit?.primaryColor ?? "#6D5DF6"} and ${kit?.secondaryColor ?? "#0EA5A4"}, no text, no letters, aspect ${args.aspect}.`,
+      });
+      const part = res.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
+      if (!part?.inlineData?.data) return { skipped: true, reason: "no image returned" };
+      const buf = Buffer.from(part.inlineData.data, "base64");
+      const key = `posts/${ctx.org.id}/${Date.now()}.png`;
+      const url = await putObject(key, buf, part.inlineData.mimeType ?? "image/png");
+      return { url, key, bytes: buf.length };
+    } catch (e) {
+      // Free-tier keys have zero image quota; a missing image must not sink the whole post.
+      const reason = e instanceof Error ? e.message.slice(0, 200) : String(e);
+      console.warn("[generate_hero_image] skipped:", reason);
+      return { skipped: true, reason: `image generation unavailable (${reason})` };
+    }
+  },
+});
+
+export const listEventPhotos = defineTool({
+  name: "list_event_photos",
+  description: "List the most recent photos the team dropped in the org photos channel (newest first), with who posted each and when. Use before select_recap_photos.",
+  input: z.object({ limit: z.number().int().min(1).max(50).default(24) }),
+  effect: "read", risk: "low",
+  summarize: (a) => `List the last ${a.limit} event photos`,
+  async execute(args, ctx) {
+    const channelId = ctx.org.channels["photos"];
+    if (!channelId) return { error: "No photos channel configured. Run `/tether channels` (creates #photos) or `/tether setup photos:#channel`." };
+    const images = await ctx.notify.listChannelImages({ channelId, limit: args.limit });
+    return {
+      channelId, count: images.length,
+      photos: images.map((p, i) => ({ n: i + 1, messageId: p.messageId, by: p.authorName, postedAt: p.postedAt, name: p.name, width: p.width, height: p.height, url: p.url })),
+    };
+  },
+});
+
+const recapSchema = z.object({
+  picks: z.array(z.object({
+    photo: z.number().int().min(1).describe("1-based photo number as labelled in the prompt"),
+    caption: z.string().max(140).describe("Short caption for this photo, no hashtags"),
+    reason: z.string().max(120).describe("Why it made the cut: energy, faces, composition, tells the story"),
+  })),
+  skipped: z.string().max(300).default("").describe("What was left out and why, in one sentence"),
+});
+
+// Discord's media proxy resizes server-side, so a 6 MB phone photo reaches Gemini as a few hundred KB.
+const RECAP_MAX_CANDIDATES = 12;
+const RECAP_MAX_INLINE_BYTES = 16 * 1024 * 1024;
+
+export const selectRecapPhotos = defineTool({
+  name: "select_recap_photos",
+  description: "Look at the recent event photos with vision, pick the best few for a recap post, write a caption for each, and store durable copies. Returns the picked photo URLs to pass to post_announcement.",
+  input: z.object({
+    brief: z.string().describe("What the recap is about and the mood wanted, e.g. 'Day 1 recap: hacking, snacks, late night energy'"),
+    count: z.number().int().min(1).max(8).default(4),
+    messageIds: z.array(z.string()).optional().describe("Restrict to these photo message ids from list_event_photos"),
+  }),
+  effect: "write", risk: "low",
+  summarize: (a) => `Pick ${a.count} recap photos`,
+  async execute(args, ctx) {
+    const channelId = ctx.org.channels["photos"];
+    if (!channelId) return { error: "No photos channel configured. Run `/tether channels` (creates #photos) or `/tether setup photos:#channel`." };
+    let images = await ctx.notify.listChannelImages({ channelId, limit: 50 });
+    if (args.messageIds?.length) images = images.filter((p) => args.messageIds!.includes(p.messageId));
+    images = images.slice(0, RECAP_MAX_CANDIDATES);
+    if (!images.length) return { error: "No photos found in the photos channel" };
+
+    // Fetch downscaled copies for the model; keep the full-size URL for the post itself.
+    const candidates: { image: typeof images[number]; buf: Buffer; mimeType: string }[] = [];
+    let inlineBytes = 0;
+    for (const image of images) {
+      const src = image.proxyUrl ? `${image.proxyUrl}${image.proxyUrl.includes("?") ? "&" : "?"}width=1280&height=1280` : image.url;
+      const fetched = await fetchTrustedMedia(src, { maxBytes: 6 * 1024 * 1024, mimeHint: image.contentType });
+      if ("error" in fetched) continue;
+      if (inlineBytes + fetched.buf.length > RECAP_MAX_INLINE_BYTES) break;
+      inlineBytes += fetched.buf.length;
+      candidates.push({ image, ...fetched });
+    }
+    if (!candidates.length) return { error: "Could not fetch any of the photos" };
+
+    const parts: Part[] = [{ text: `Event: ${ctx.org.name}. Brief: ${args.brief}. Pick the best ${Math.min(args.count, candidates.length)} photos for a recap post, best first. Prefer sharp photos with people, energy and variety; avoid near-duplicates and anything unflattering.` }];
+    candidates.forEach((c, i) => {
+      parts.push({ text: `Photo ${i + 1} (posted by ${c.image.authorName ?? "unknown"})` });
+      parts.push({ inlineData: { mimeType: c.mimeType, data: c.buf.toString("base64") } });
     });
-    const part = res.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
-    if (!part?.inlineData?.data) return { error: "no image returned" };
-    const buf = Buffer.from(part.inlineData.data, "base64");
-    const key = `posts/${ctx.org.id}/${Date.now()}.png`;
-    const url = await putObject(key, buf, part.inlineData.mimeType ?? "image/png");
-    return { url, key, bytes: buf.length };
+    const result = await generateStructuredMultimodal({
+      system: "You are a photo editor for a student hackathon's social media. Judge only what is in the photos.",
+      parts, schema: recapSchema, temperature: 0.3,
+    });
+
+    const picks = [];
+    const stamp = Date.now();
+    for (const [i, pick] of result.picks.slice(0, args.count).entries()) {
+      const c = candidates[pick.photo - 1];
+      if (!c) continue;
+      // Store a durable copy: Discord attachment URLs are signed and expire.
+      let url = c.image.url;
+      let storage: "vultr-object-storage" | "discord-cdn" = "discord-cdn";
+      try {
+        const full = await fetchTrustedMedia(c.image.url, { maxBytes: 25 * 1024 * 1024, mimeHint: c.image.contentType });
+        const data = "error" in full ? { buf: c.buf, mimeType: c.mimeType } : full;
+        const stored = await uploadObject(`recap/${ctx.org.id}/${stamp}-${i + 1}.${extensionFor(data.mimeType)}`, data.buf, data.mimeType);
+        if (stored) { url = stored; storage = "vultr-object-storage"; }
+      } catch (e) {
+        console.warn("[select_recap_photos] object storage upload failed, keeping Discord URL:", e instanceof Error ? e.message : e);
+      }
+      picks.push({ url, caption: pick.caption, reason: pick.reason, credit: c.image.authorName, sourceMessageId: c.image.messageId, storage });
+    }
+    return { picks, candidates: candidates.length, skipped: result.skipped };
   },
 });
 
 export const postAnnouncement = defineTool({
   name: "post_announcement",
-  description: "Post text (and optional image URL) to the org announcements channel.",
-  input: z.object({ text: z.string(), imageUrl: z.string().url().optional() }),
+  description: "Post text with up to four images to the org announcements channel. Pass the picked recap photo URLs as imageUrls.",
+  input: z.object({
+    text: z.string(),
+    imageUrl: z.string().url().optional().describe("Single image (hero image)"),
+    imageUrls: z.array(z.string().url()).max(4).optional().describe("Up to four images, e.g. recap photos"),
+  }),
   effect: "external", risk: "medium",
   summarize: (a) => `Post announcement: ${a.text.slice(0, 80)}`,
   async execute(args, ctx) {
     const channelId = ctx.org.channels["announcements"];
     if (!channelId) return { error: "no announcements channel configured" };
-    let attachments: { name: string; data: Buffer }[] | undefined;
-    if (args.imageUrl) {
-      const r = await fetch(args.imageUrl);
-      attachments = [{ name: "post.png", data: Buffer.from(await r.arrayBuffer()) }];
+    const urls = [...(args.imageUrl ? [args.imageUrl] : []), ...(args.imageUrls ?? [])].slice(0, 4);
+    const attachments: { name: string; data: Buffer }[] = [];
+    const failed: string[] = [];
+    for (const [i, url] of urls.entries()) {
+      const fetched = await fetchTrustedMedia(url, { maxBytes: 25 * 1024 * 1024 });
+      if ("error" in fetched) { failed.push(`${url}: ${fetched.error}`); continue; }
+      attachments.push({ name: `post-${i + 1}.${extensionFor(fetched.mimeType)}`, data: fetched.buf });
     }
-    return ctx.notify.postToChannel({ channelId, text: args.text, attachments });
+    const posted = await ctx.notify.postToChannel({ channelId, text: args.text, attachments: attachments.length ? attachments : undefined });
+    return { ...posted, images: attachments.length, ...(failed.length ? { failedImages: failed } : {}) };
   },
 });
 
-export const socialsTools = [generatePostCopy, generateHeroImage, postAnnouncement];
+export const socialsTools = [generatePostCopy, generateHeroImage, listEventPhotos, selectRecapPhotos, postAnnouncement];

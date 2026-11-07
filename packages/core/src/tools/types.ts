@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { Db } from "../db/client.js";
 import type { orgs, users } from "../db/schema.js";
+import type { Card } from "../ui/card.js";
 
 export type Effect = "read" | "write" | "external";
 export type Risk = "low" | "medium" | "high";
@@ -42,15 +43,40 @@ export function defineTool<I extends z.ZodTypeAny, O>(t: Tool<I, O>): Tool<I, O>
   return t;
 }
 
+/**
+ * A message body: a designed Card (rendered as Components V2 by the adapter) or plain text.
+ * `text` stays supported so callers can migrate one at a time; when both are given the card wins.
+ */
+export type MessageBody = { text: string; card?: Card } | { text?: string; card: Card };
+type Attachments = { attachments?: { name: string; data: Buffer }[] };
+
 /** What core needs from the chat adapter. Implemented by apps/server with Discord. */
 export interface Notifier {
-  postPlanCard(input: { run: RunRef; plan: import("../db/schema.js").Plan }): Promise<{ channelId: string; messageId: string }>;
-  postApprovalCards(input: { run: RunRef; actions: ActionRef[] }): Promise<{ id: string; channelId: string; messageId: string }[]>;
-  updateStatus(input: { run: RunRef; lines: string[]; status: string }): Promise<void>;
-  postSummary(input: { run: RunRef; text: string; attachments?: { name: string; data: Buffer }[] }): Promise<void>;
-  postToChannel(input: { channelId: string; text: string; attachments?: { name: string; data: Buffer }[] }): Promise<{ messageId: string }>;
-  dm(input: { discordId: string; text: string }): Promise<void>;
+  postPlanCard(input: { run: RunRef; plan: import("../db/schema.js").Plan; card?: Card }): Promise<{ channelId: string; messageId: string }>;
+  postApprovalCards(input: { run: RunRef; actions: (ActionRef & { card?: Card })[] }): Promise<{ id: string; channelId: string; messageId: string }[]>;
+  updateStatus(input: { run: RunRef; status: string } & ({ lines: string[]; card?: Card } | { lines?: string[]; card: Card })): Promise<void>;
+  postSummary(input: { run: RunRef } & MessageBody & Attachments): Promise<void>;
+  postToChannel(input: { channelId: string } & MessageBody & Attachments): Promise<{ messageId: string }>;
+  /** Re-render a message the adapter posted earlier (approval card after a decision, etc.). */
+  editMessage(input: { channelId: string; messageId: string } & MessageBody): Promise<void>;
+  dm(input: { discordId: string } & MessageBody): Promise<void>;
+  /** Recent image attachments in a channel, newest first (event photos the team dropped in #photos). */
+  listChannelImages(input: { channelId: string; limit?: number }): Promise<ChannelImage[]>;
 }
+
+export type ChannelImage = {
+  url: string;
+  /** Discord's media proxy URL; accepts ?width=&height= for server-side downscaling. */
+  proxyUrl?: string;
+  contentType?: string;
+  name?: string;
+  bytes?: number;
+  width?: number;
+  height?: number;
+  authorName?: string;
+  postedAt: string;
+  messageId: string;
+};
 
 export type RunRef = { id: string; orgId: string; source: Record<string, string | undefined>; request: string };
 export type ActionRef = {

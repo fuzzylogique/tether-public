@@ -15,10 +15,13 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "tsx src/db/applyTigerSql.ts --extensions && drizzle-kit push && tsx src/db/applyTigerSql.ts",
     "db:seed": "tsx src/db/seed.ts",
+    "demo:reset": "tsx src/db/reset.ts",
     "eval:plans": "tsx src/eval/plans.ts",
     "google:auth": "tsx src/scripts/google-auth.ts",
     "env:check": "tsx src/scripts/doctor.ts",
-    "sheet:create": "tsx src/scripts/sheet-create.ts"
+    "sheet:create": "tsx src/scripts/sheet-create.ts",
+    "test:charts": "node --import tsx --test src/ui/charts/charts.test.ts",
+    "google:share": "tsx src/scripts/google-share.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.700.0",

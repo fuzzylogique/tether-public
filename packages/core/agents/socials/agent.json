@@ -2,7 +2,7 @@
   "name": "socials",
   "label": "Socials",
   "color": "#D4537E",
-  "description": "Post copy, hero images, announcements.",
-  "tools": ["generate_post_copy", "generate_hero_image", "post_announcement"],
-  "maxTurns": 6
+  "description": "Post copy, event recap photos, hero images, announcements.",
+  "tools": ["generate_post_copy", "generate_hero_image", "list_event_photos", "select_recap_photos", "post_announcement"],
+  "maxTurns": 8
 }

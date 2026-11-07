@@ -32,8 +32,36 @@ SELECT add_continuous_aggregate_policy('agent_activity_hourly',
 -- Vector index (idempotent; drizzle may skip it on first push)
 CREATE INDEX IF NOT EXISTS documents_embedding_idx ON documents USING hnsw (embedding vector_cosine_ops);
 
+-- Inbound-mail dedup lookup index (idempotent; drizzle-kit push skipped it on the shared DB)
+CREATE INDEX IF NOT EXISTS processed_mail_org_thread_idx ON processed_mail (org_id, thread_id);
+
 -- BM25 index for hybrid search (no-op if pg_textsearch missing)
 DO $$ BEGIN
   EXECUTE 'CREATE INDEX IF NOT EXISTS documents_bm25_idx ON documents USING bm25 (content) WITH (text_config = ''english'')';
 EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'bm25 index skipped: %', SQLERRM;
 END $$;
+
+-- Additive finance columns and table. Kept here as well as in the Drizzle schema because `drizzle-kit push`
+-- aborts on this database (it tries to DROP the continuous aggregate above) before it reaches ALTER TABLE.
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS tax numeric(12, 2);
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS paid_by text;
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS reimbursement text NOT NULL DEFAULT 'none';
+CREATE TABLE IF NOT EXISTS income (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id uuid NOT NULL REFERENCES orgs(id),
+  source text NOT NULL,
+  sponsor_id uuid REFERENCES sponsors(id),
+  amount numeric(12, 2) NOT NULL,
+  status text NOT NULL DEFAULT 'pledged',
+  date text,
+  notes text,
+  sheet_row integer,
+  logged_by_discord_id text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Nudge replies and team roles (additive; see the note above about drizzle-kit push).
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS last_reply text;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS last_reply_at timestamptz;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE orgs ADD COLUMN IF NOT EXISTS roles jsonb NOT NULL DEFAULT '{}'::jsonb;
