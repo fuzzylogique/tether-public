@@ -1,4 +1,5 @@
 import { GoogleGenAI, type Content, type FunctionDeclaration, type Part, type Schema } from "@google/genai";
+import { NonRetriableError } from "inngest";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import type { z } from "zod";
 import { env } from "../env.js";
@@ -27,6 +28,8 @@ export async function generateWithRetry(params: Parameters<GoogleGenAI["models"]
         params = { ...params, model: fallback };
         continue;
       }
+      // Daily quota won't recover for hours; an Inngest retry would only burn more requests.
+      if (dailyQuota) throw new NonRetriableError(msg, { cause: e });
       const retryable = !dailyQuota && /"code":(429|503)|RESOURCE_EXHAUSTED|UNAVAILABLE|high demand/.test(msg);
       if (!retryable || i >= attempts) throw e;
       const hinted = msg.match(/retry in (\d+(?:\.\d+)?)s/i);

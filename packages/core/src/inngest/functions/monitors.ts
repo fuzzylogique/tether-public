@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, lt, ne } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lt, ne } from "drizzle-orm";
 import { inngest } from "../client.js";
 import { db } from "../../db/client.js";
 import { orgs, sponsors, sponsorThreads, tasks } from "../../db/schema.js";
@@ -14,7 +14,11 @@ export const monitorTasksFn = inngest.createFunction(
       const now = new Date();
       const rows = await db().select().from(tasks).where(and(ne(tasks.status, "done"), isNotNull(tasks.dueAt), lt(tasks.dueAt, now), eq(tasks.escalated, false)));
       const twoHoursAgo = Date.now() - 2 * 3600_000;
-      return rows.filter((t) => !t.lastNudgedAt || t.lastNudgedAt.getTime() < twoHoursAgo);
+      const due = rows.filter((t) => !t.lastNudgedAt || t.lastNudgedAt.getTime() < twoHoursAgo);
+      // Claim the 2h window before dispatch: if the agent run fails (e.g. Gemini quota) or the
+      // nudge waits on approval, we must not re-fire the same task every 15 minutes.
+      if (due.length) await db().update(tasks).set({ lastNudgedAt: now }).where(inArray(tasks.id, due.map((t) => t.id)));
+      return due;
     });
     for (const t of overdue) {
       const [org] = await db().select().from(orgs).where(eq(orgs.id, t.orgId));
@@ -45,7 +49,12 @@ export const pollSponsorMailFn = inngest.createFunction(
       const emails = list.map((s) => s.contactEmail).filter((e): e is string => !!e);
       if (!emails.length) continue;
       const mails = await step.run(`search-${org.id}`, () => searchMail(`newer_than:1d (${emails.map((e) => `from:${e}`).join(" OR ")})`, 10));
+      // Gmail lists newest first. Only the newest message per thread is compared against the stored
+      // one; handling older ones too would overwrite lastMessageId and re-dispatch both every poll.
+      const seenThreads = new Set<string>();
       for (const m of mails) {
+        if (seenThreads.has(m.threadId)) continue;
+        seenThreads.add(m.threadId);
         const [thread] = await db().select().from(sponsorThreads).where(eq(sponsorThreads.gmailThreadId, m.threadId));
         if (thread?.lastMessageId === m.id) continue;
         const sponsor = list.find((s) => s.contactEmail && m.from.toLowerCase().includes(s.contactEmail.toLowerCase()));
