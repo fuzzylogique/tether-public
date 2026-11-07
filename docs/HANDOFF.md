@@ -4,22 +4,22 @@ For whoever picks up iteration tomorrow, starting with the Vultr integration. Wr
 
 ## 1. Where the code is
 
-Everything that was built today is on `origin`. No worktree has uncommitted or unpushed work. The only local-only files are two scratch scripts (`packages/core/.fire.mts`, `.local.mts`) a live-test session wrote; they are untracked and should stay that way.
+Everything that was built today is on `origin`, and as of 23:06 all of it except the db:push fix is on `main` (PR 8 merged; GitHub marked PR 5 merged with it because its commits landed). No worktree has uncommitted or unpushed work. The only local-only files are two scratch scripts (`packages/core/.fire.mts`, `.local.mts`) a live-test session wrote; they are untracked and should stay that way.
 
 | Branch | PR | State | What it carries |
 |---|---|---|---|
-| `main` | | 5534a1f | PRs 1 to 4 merged: adversarial review doc, cron gating + `processed_mail` + stage-ready seed, Discord UI design system (Components V2 cards, SVG charts, app emoji), team channels + Gemini quota guards. |
-| `feat/recap-photos` | [#8](https://github.com/fuzzylogique/tether/pull/8) → main | open, mergeable | 4 commits: receipts to Object Storage, finance sheet (income, reimbursements, HST, Summary tab), recap posts from `#photos`, nudge replies, approval-card routing by team, `/plan from_chat`, standing workflows, inbox digest. |
-| `feat/finance-receipts-and-sheet` | [#5](https://github.com/fuzzylogique/tether/pull/5) → main | open, **superseded** | First 2 commits of #8. Same code. |
-| `feat/recap-photos` | [#6](https://github.com/fuzzylogique/tether/pull/6) → #5 | open, **superseded** | Same head commit as #8, stacked base. |
-| `claude/clever-kare-486733` | [#7](https://github.com/fuzzylogique/tether/pull/7) → main | open, mergeable | Safe `pnpm db:push` (`src/db/push.ts`, protected Timescale objects, `pnpm db:plan`), 20 FKs and 5 indexes already applied to the shared DB. |
+| `main` | | a7e3f92 | PRs 1 to 5 and 8 merged: adversarial review doc, cron gating + `processed_mail` + stage-ready seed, Discord UI design system (Components V2 cards, SVG charts, app emoji), team channels + Gemini quota guards, receipts to Object Storage, finance sheet (income, reimbursements, HST, Summary tab), recap posts from `#photos`, nudge replies, approval-card routing by team, `/plan from_chat`, standing workflows, inbox digest. `main` is byte-identical to `feat/recap-photos`. |
+| `feat/recap-photos` | [#8](https://github.com/fuzzylogique/tether/pull/8) → main | **merged** 23:06 | The 4 feature commits above. Branch can be deleted. |
+| `feat/finance-receipts-and-sheet` | [#5](https://github.com/fuzzylogique/tether/pull/5) → main | **merged** (via #8) | First 2 commits of #8. Branch can be deleted. |
+| `feat/recap-photos` | [#6](https://github.com/fuzzylogique/tether/pull/6) → `feat/finance-receipts-and-sheet` | open, **stale: close it** | Same head commit as #8, stacked base. GitHub cannot auto-close it because its base is not `main`. |
+| `claude/clever-kare-486733` | [#7](https://github.com/fuzzylogique/tether/pull/7) → main | open, **conflicting** (one doc paragraph) | Safe `pnpm db:push` (`src/db/push.ts`, protected Timescale objects, `pnpm db:plan`), 20 FKs and 5 indexes already applied to the shared DB. |
 | `docs/handoff-2026-11-07` | this doc | | |
 
-**Merge plan.** Merge #8, then #7, then close #5 and #6 as superseded (GitHub will not auto-close them because #8 is a different PR on the same branch). #7 and #8 conflict only in one paragraph of `docs/ARCHITECTURE.md` (the "Data" section: #7 corrects the hypertable claim and adds the push rules, #8 adds the finance-sheet subsection; keep both, and keep `income` in the mirror-table list). `schema.ts` and `tiger.sql` auto-merge, and the merged tree passes `pnpm typecheck` (checked in a scratch worktree tonight). Whoever merges #7 should also pull before the next `pnpm db:push`: the old script reported success while doing nothing.
+**What is left to merge.** Close #6 (stale). Then #7: it now conflicts with `main` in exactly one paragraph of `docs/ARCHITECTURE.md`, the "Data" section. `main` has the finance-sheet subsection and still claims `runs/steps/actions/events` are hypertables; #7 corrects that claim (only `events` is) and adds the schema-push rules. Resolution: take #7's first sentence, add `income` to its mirror-table list, keep `main`'s "Finance sheet" subsection, then #7's "Schema push on the shared DB" paragraph. `schema.ts` and `tiger.sql` auto-merge, and that exact merged tree passed `pnpm typecheck` in a scratch worktree tonight. In the `clever-kare-486733` worktree: `git merge main`, fix the doc, `pnpm typecheck`, push. Whoever merges #7 should tell the team to pull before the next `pnpm db:push`: the old script reported success while doing nothing.
 
-**Worktrees to clean up.** `.claude/worktrees/festive-hypatia-dc939c` (PR 2) and `wizardly-maxwell-4ba33f` (PR 3) are merged and stale. `clever-kare-486733` is PR 7; remove it after #7 merges.
+**Cleanup.** Worktrees `.claude/worktrees/festive-hypatia-dc939c` (PR 2) and `wizardly-maxwell-4ba33f` (PR 3) are merged and stale; `clever-kare-486733` is PR 7, remove it after #7 merges. Branches `feat/recap-photos` and `feat/finance-receipts-and-sheet` are merged and can be deleted on origin once #6 is closed.
 
-**Schema state.** The shared Tiger database already has every column from #8 (applied through the idempotent statements in `sql/tiger.sql`) and every FK and index from #7. Nobody needs to run `db:push` for the current code. After #7 merges, `pnpm db:plan` is the dry run to use before any push.
+**Schema state.** The shared Tiger database already has every column on `main` (applied through the idempotent statements in `sql/tiger.sql`) and every FK and index from #7. Nobody needs to run `db:push` for the current code. Until #7 merges, do not run `pnpm db:push` on `main` at all: the old script is the broken one. After #7 merges, `pnpm db:plan` is the dry run to use before any push.
 
 ## 2. What has been built, and why
 
@@ -28,7 +28,7 @@ Everything that was built today is on `origin`. No worktree has uncommitted or u
 - **Policy gateway** (`policy/engine.ts`): every side-effecting tool declares `effect` and `risk`; `decide()` returns run / approve / deny; org `policies` rows loosen defaults (seeded: `log_expense` under $50 auto-runs). This is the architectural idea the pitch rests on.
 - **Failure visibility** (PR 4): failed steps mark the run failed, Gemini 429/503 retry with backoff, daily-quota exhaustion falls back to `GEMINI_MODEL_FALLBACK` instead of retrying, and a failed run no longer multiplies model calls.
 - **Cron gating** (PR 2): `monitor-tasks`, `poll-sponsor-mail` and `inbox-digest` register only on the one process with `TETHER_RUN_CRONS=1`. Gmail dedup is a `processed_mail` table, not a last-message-id. Ownerless tasks and orgs without `#ops` are skipped with an `events` row.
-- **Nudge loop** (PR 8): the monitor claims an overdue task with one conditional UPDATE that owns `nudge_count` and `escalated`; the agent only writes the message. Replies (DM or reply in `#tasks`) become `tether/nudge.replied`, classified by one structured Gemini call into eta / done / cannot / question / other.
+- **Nudge loop** (PR 8, merged): the monitor claims an overdue task with one conditional UPDATE that owns `nudge_count` and `escalated`; the agent only writes the message. Replies (DM or reply in `#tasks`) become `tether/nudge.replied`, classified by one structured Gemini call into eta / done / cannot / question / other.
 - **Standing workflows** (PR 8, `workflows/registry.ts`): prebuilt DAGs fired by events, approved once when the org turns them on, tools still gated by policy. `sponsor-confirmed` is the first one.
 - **Plan from chat** (PR 8): `/plan from_chat:N` feeds the last N human messages to the planner as data.
 - **Inbox digest** (PR 8): `/digest` and `DIGEST_CRON` summarize the organizer inbox to `#ops`, needs-action first.
@@ -37,12 +37,12 @@ Everything that was built today is on `origin`. No worktree has uncommitted or u
 - **Components V2 card system** (PR 3): semantic cards in `core/ui/cards`, pixels at the edge (`ui/render.ts`), SVG charts rasterised with `@resvg/resvg-js` and vendored Inter so output is identical on macOS and the Alpine image. `pnpm discord:preview` posts every card from fixtures; `pnpm test:charts` snapshots the SVGs. Application emoji, bot avatar and banner come from the same pipeline (`pnpm discord:emoji`).
 - **Team channels and roles** (PR 4 + PR 8): `/tether channels` creates the Tether category (ops, tasks, calendar, finance, sponsorship, socials, photos), one Discord role per team, optional channel→agent binding. Single-agent runs render in their team channel; approval cards go to the channel of the team that owns the decision; every executed side effect is mirrored as one activity line (`runtime/feed.ts`). `/tether links` prints the shared calendar, sheet and Drive folder.
 
-### Finance (PR 5 / #8)
+### Finance (PR 5, merged via #8)
 - Receipt attachments travel from the Discord message through `handle-request` and `run-plan` into the agent step (REVIEW item 3; Demo 1 was dead before this).
 - `parse_receipt` uploads a durable copy to **Vultr Object Storage** under `receipts/<org>/<ts>.<ext>` and returns that URL; Discord CDN links expire within hours. Without `S3_*` keys it keeps the Discord URL.
 - Income is its own concept (`income` table, `log_income`, Income tab) so "Shopify confirmed $2k" stops becoming an expense. Reimbursements (`paid_by`, `mark_reimbursed`), HST extraction, and a formulas-only Summary tab. `sync_budget_from_sheet` validates every cell and replaces the mirror in one transaction.
 
-### Socials (PR 6 / #8)
+### Socials (PR 6, merged via #8)
 - `/post recap`: `list_event_photos` reads `#photos`, `select_recap_photos` asks Gemini vision to pick the best N with captions and stores full-size copies in Object Storage, `post_announcement` accepts up to four images and the approval card shows them as a gallery.
 - `media.ts`: one trusted-host check (Discord CDN + our bucket) and a size-capped fetch, shared by receipts and photos (REVIEW SSRF finding).
 
