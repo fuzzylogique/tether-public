@@ -17,10 +17,12 @@
     "db:seed": "pnpm --filter @tether/core db:seed",
     "demo:reset": "pnpm --filter @tether/core demo:reset",
     "discord:register": "pnpm --filter @tether/server discord:register",
+    "discord:channels": "pnpm --filter @tether/server discord:channels",
     "eval:plans": "pnpm --filter @tether/core eval:plans",
     "google:auth": "pnpm --filter @tether/core google:auth",
     "env:check": "pnpm --filter @tether/core env:check",
-    "sheet:create": "pnpm --filter @tether/core sheet:create"
+    "sheet:create": "pnpm --filter @tether/core sheet:create",
+    "google:share": "pnpm --filter @tether/core google:share"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

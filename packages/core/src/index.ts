@@ -10,6 +10,7 @@ export { defaultDecision, hasRole, ROLE_RANK } from "./policy/defaults.js";
 export { draftPlan, validatePlan, levels, singleStepPlan, requiresPlanCard, planSchema } from "./runtime/planner.js";
 export { runAgentLoop, settleAction, userMessage, PROTECTED_PREAMBLE } from "./runtime/loop.js";
 export { loadOrgByGuild, loadActor, buildToolCtx } from "./runtime/context.js";
+export { TEAM_CHANNELS, sheetUrl, calendarUrl, calendarIcsUrl, driveFolderUrl } from "./runtime/feed.js";
 export { inngest, isInngestDev, type Events, type Source, type Attachment } from "./inngest/client.js";
 export { createTetherFunctions } from "./inngest/functions/index.js";
 export { generateText, generateStructured, embed } from "./runtime/gemini.js";

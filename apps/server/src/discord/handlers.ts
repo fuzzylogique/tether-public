@@ -9,6 +9,7 @@ import {
 } from "@tether/core";
 import { planEmbed, resultEmbed } from "./embeds.js";
 import { planComponents } from "./notifier.js";
+import { linksText, provisionTeamChannels } from "./teams.js";
 
 type Org = typeof schema.orgs.$inferSelect;
 
@@ -156,6 +157,18 @@ async function onTether(i: ChatInputCommandInteraction, org: Org | undefined) {
     await db().update(schema.orgs).set({ channelAgents: { ...org.channelAgents, [ch.id]: agent } }).where(eq(schema.orgs.id, org.id));
     return i.reply({ content: `Messages in <#${ch.id}> now go to **${agents()[agent]!.label}**.`, ephemeral: true });
   }
+  if (sub === "channels") {
+    if (!i.guild) return i.reply({ content: "Use this in a server.", ephemeral: true });
+    await i.deferReply({ ephemeral: true });
+    const res = await provisionTeamChannels(i.guild, org).catch((e: { code?: number }) => {
+      if (e.code === 50013) return undefined;
+      throw e;
+    });
+    if (!res) return i.editReply("I need the **Manage Channels** permission to create team channels. Grant it to my role in Server Settings → Roles, then run this again.");
+    const { org: updated, created } = res;
+    return i.editReply(`${created.length ? `Created ${created.length} channels.` : "Team channels already exist."}\n\n${linksText(updated)}`);
+  }
+  if (sub === "links") return i.reply({ content: linksText(org), allowedMentions: { parse: [] } });
   if (sub === "policies") {
     const rows = await db().select().from(schema.policies).where(eq(schema.policies.orgId, org.id));
     return i.reply({ ephemeral: true, content: rows.length ? rows.map((p) => `• \`${p.tool}\` → **${p.decision}** ${Object.keys(p.condition).length ? `when ${JSON.stringify(p.condition)}` : ""}`).join("\n") : "No org policies; defaults apply (reads run, low-risk writes run, everything else asks)." });

@@ -54,12 +54,14 @@ export const updateTask = defineTool({
 
 export const nudgeOwner = defineTool({
   name: "nudge_owner",
-  description: "Send a Discord DM to a task owner reminding them of an overdue or upcoming task.",
+  description: "Nudge a task owner about an overdue or upcoming task. Posted in the team #tasks channel with an @mention so the whole team sees it.",
   input: z.object({ discordId: z.string(), message: z.string(), taskTitle: z.string().optional() }),
   effect: "external", risk: "medium",
-  summarize: (a) => `DM <@${a.discordId}>: ${a.message.slice(0, 80)}`,
+  summarize: (a) => `Nudge <@${a.discordId}>: ${a.message.slice(0, 80)}`,
   async execute(args, ctx) {
-    await ctx.notify.dm({ discordId: args.discordId, text: args.message });
+    const channelId = ctx.org.channels["tasks"];
+    if (channelId) await ctx.notify.postToChannel({ channelId, text: `⏰ <@${args.discordId}> ${args.message}${args.taskTitle ? `\n-# task: ${args.taskTitle}` : ""}` });
+    else await ctx.notify.dm({ discordId: args.discordId, text: args.message });
     if (args.taskTitle) {
       const [t] = await ctx.db.select().from(tasks).where(and(eq(tasks.orgId, ctx.org.id), ilike(tasks.title, `%${args.taskTitle}%`)));
       if (t) await ctx.db.update(tasks).set({ nudgeCount: t.nudgeCount + 1, lastNudgedAt: new Date() }).where(eq(tasks.id, t.id));
