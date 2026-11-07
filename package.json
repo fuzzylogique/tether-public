@@ -18,6 +18,7 @@
     "demo:reset": "pnpm --filter @tether/core demo:reset",
     "discord:register": "pnpm --filter @tether/server discord:register",
     "discord:preview": "pnpm --filter @tether/server discord:preview",
+    "discord:emoji": "pnpm --filter @tether/server discord:emoji",
     "eval:plans": "pnpm --filter @tether/core eval:plans",
     "google:auth": "pnpm --filter @tether/core google:auth",
     "env:check": "pnpm --filter @tether/core env:check",

@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { fixtures } from "../fixtures.js";
-import { EMOJI_NAMES, AGENT_COLORS, STATUS_COLORS, TETHER } from "../tokens.js";
+import { emojiBadges } from "../brand.js";
 import { renderChart } from "./index.js";
 import type { ChartSpec } from "./types.js";
 
@@ -23,10 +23,7 @@ function specs(): [string, ChartSpec][] {
       if (b.kind === "gallery") for (const m of b.items) if ("chart" in m) out.push([`${f.name}--${m.name}`, m.chart]);
     }
   }
-  for (const name of EMOJI_NAMES) {
-    const key = name.replace("tether_", "");
-    out.push([`emoji--${key}`, { type: "badge", size: 128, bg: AGENT_COLORS[key] ?? STATUS_COLORS[key] ?? TETHER, glyph: key as never }]);
-  }
+  for (const e of emojiBadges()) out.push([`emoji--${e.name.replace("tether_", "")}`, e.spec]);
   out.push(["sparkline", { type: "sparkline", title: "Agent activity", caption: "last 24h", points: [0, 1, 3, 2, 5, 8, 6, 4, 9, 12, 7, 5] }]);
   return out;
 }

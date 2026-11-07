@@ -1,6 +1,7 @@
 import { Client, GatewayIntentBits, Partials, Events } from "discord.js";
 import { env } from "@tether/core";
 import { onInteraction, onMessage } from "./handlers.js";
+import { loadEmojis } from "./ui/emoji.js";
 
 export async function startDiscord() {
   const client = new Client({
@@ -9,7 +10,11 @@ export async function startDiscord() {
   });
   client.on(Events.InteractionCreate, (i) => onInteraction(i).catch((e) => console.error("interaction error", e)));
   client.on(Events.MessageCreate, (m) => onMessage(m).catch((e) => console.error("message error", e)));
-  client.once(Events.ClientReady, (c) => console.log(`discord ready as ${c.user.tag}`));
+  client.once(Events.ClientReady, async (c) => {
+    console.log(`discord ready as ${c.user.tag}`);
+    await c.application.fetch().catch(() => undefined);
+    console.log(`app emojis: ${await loadEmojis(c)} (unicode fallback for the rest)`);
+  });
   const token = env().DISCORD_TOKEN;
   if (!token) { console.warn("DISCORD_TOKEN not set; running without Discord"); return client; }
   await client.login(token);
