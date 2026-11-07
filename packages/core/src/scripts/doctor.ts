@@ -83,7 +83,7 @@ const checks: Check[] = [
   {
     name: "Vultr Object Storage",
     async run() {
-      if (!e.S3_ACCESS_KEY) return "not configured → images fall back to data URLs";
+      if (!e.S3_ACCESS_KEY) return "not configured → receipts keep expiring Discord URLs, images fall back to data URLs";
       const { S3Client, HeadBucketCommand } = await import("@aws-sdk/client-s3");
       const s3 = new S3Client({ endpoint: e.S3_ENDPOINT, region: "us-east-1", credentials: { accessKeyId: e.S3_ACCESS_KEY, secretAccessKey: e.S3_SECRET_KEY! } });
       await s3.send(new HeadBucketCommand({ Bucket: e.S3_BUCKET }));

@@ -3,6 +3,6 @@
   "label": "Sponsorship outreach",
   "color": "#7F77DD",
   "description": "Sponsor pipeline, follow-ups, pitch and thank-you emails, deliverables tracking.",
-  "tools": ["list_sponsors", "update_sponsor", "create_email_draft", "send_email", "search_sponsor_replies"],
+  "tools": ["list_sponsors", "update_sponsor", "create_email_draft", "send_email", "search_sponsor_replies", "inbox_digest"],
   "maxTurns": 8
 }

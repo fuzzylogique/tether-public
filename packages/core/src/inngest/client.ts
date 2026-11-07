@@ -8,10 +8,12 @@ export type Events = {
   "tether/request.received": {
     data: {
       orgId: string;
-      trigger: "slash" | "mention" | "thread" | "cron" | "watcher";
+      trigger: "slash" | "mention" | "thread" | "cron" | "watcher" | "dm";
       mode: "auto" | "agent";
       agent?: string;
       text: string;
+      /** Extra material for the planner (a chat transcript from `/plan from_chat`). Never shown as the request. */
+      context?: string;
       source: Source;
       actorDiscordId?: string;
       actorName?: string;
@@ -19,7 +21,7 @@ export type Events = {
     };
   };
   "tether/plan.decided": { data: { runId: string; approved: boolean; plan?: Plan; deciderDiscordId?: string } };
-  "tether/plan.approved": { data: { runId: string } };
+  "tether/plan.approved": { data: { runId: string; attachments?: Attachment[] } };
   "tether/step.requested": {
     data: {
       runId: string; stepId: string; agent: string; instruction: string;
@@ -31,6 +33,10 @@ export type Events = {
     data: { actionId: string; runId: string; approved: boolean; note?: string; editedArgs?: Record<string, unknown>; deciderDiscordId?: string; deciderName?: string };
   };
   "tether/task.overdue": { data: { orgId: string; taskId: string } };
+  /** A task owner answered a nudge (DM, or a reply to the nudge in #tasks). */
+  "tether/nudge.replied": { data: { orgId: string; taskId: string; ownerDiscordId: string; ownerName?: string; text: string; source: Source } };
+  /** A standing workflow fired (see workflows/registry.ts). `params` are validated against the template. */
+  "tether/workflow.triggered": { data: { orgId: string; name: string; params: Record<string, unknown>; actorDiscordId?: string; actorName?: string; source?: Source } };
 };
 
 export const isInngestDev = process.env.INNGEST_DEV === "1" || process.env.INNGEST_DEV === "true";
