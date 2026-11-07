@@ -5,10 +5,13 @@ import {
 } from "discord.js";
 import { eq } from "drizzle-orm";
 import {
-  agentNames, agents, buildToolCtx, db, getTool, inngest, loadActor, loadOrgByGuild, schema, type Plan,
+  agentNames, agents, approvalCardFor, budgetCard, buildToolCtx, calendarCard, dashboardRunUrl, db, getTool, inngest, loadActor,
+  loadOrgByGuild, planCard, schema, sponsorsCard, tasksCard,
+  type ApprovalDecision, type BudgetRow, type EventRow, type Plan, type PlanDecision, type SponsorRow, type TaskRow,
 } from "@tether/core";
 import { planEmbed, resultEmbed } from "./embeds.js";
 import { planComponents } from "./notifier.js";
+import { render, renderEdit } from "./ui/render.js";
 import { linksText, provisionTeamChannels } from "./teams.js";
 
 type Org = typeof schema.orgs.$inferSelect;
@@ -76,10 +79,10 @@ async function onCommand(i: ChatInputCommandInteraction) {
 
   switch (`${i.commandName}:${sub ?? ""}`) {
     case "budget:summary": {
-      const r = (await runToolDirect(org, i, "budget_summary", { category: i.options.getString("category") ?? undefined })) as { rows: { category: string; allocated: number; spent: number; remaining: number; pctUsed: number }[]; totals: { allocated: number; spent: number; remaining: number } };
-      const bar = (p: number) => "█".repeat(Math.min(10, Math.round(p / 10))).padEnd(10, "░");
-      const body = r.rows.map((x) => `\`${bar(x.pctUsed)}\` **${x.category}** $${x.spent.toFixed(0)} / $${x.allocated.toFixed(0)} (${x.pctUsed}%)`).join("\n");
-      return i.editReply({ embeds: [resultEmbed("finance", "Budget", `${body}\n\n**Total** $${r.totals.spent.toFixed(0)} / $${r.totals.allocated.toFixed(0)} · $${r.totals.remaining.toFixed(0)} left`)] });
+      const category = i.options.getString("category") ?? undefined;
+      const r = (await runToolDirect(org, i, "budget_summary", { category })) as { rows: BudgetRow[]; totals: { allocated: number; spent: number; remaining: number } };
+      const sheetUrl = org.sheetId ? `https://docs.google.com/spreadsheets/d/${org.sheetId}` : undefined;
+      return i.editReply(await render(budgetCard({ ...r, sheetUrl, category })));
     }
     case "budget:log":
       return emitRequest(org, i, { mode: "agent", agent: "finance", text: `Log an expense: amount ${i.options.getNumber("amount")}, category ${i.options.getString("category")}, vendor ${i.options.getString("vendor") ?? "n/a"}, description ${i.options.getString("description") ?? "n/a"}. Then report the category status.` });
@@ -88,18 +91,23 @@ async function onCommand(i: ChatInputCommandInteraction) {
       return emitRequest(org, i, { mode: "agent", agent: "finance", text: `A receipt image is attached. Parse it, pick the best budget category, log the expense, and report the category status. ${i.options.getString("note") ?? ""}`, attachments: [{ url: att.url, contentType: att.contentType ?? undefined, name: att.name }] });
     }
     case "sponsor:list": {
-      const rows = (await runToolDirect(org, i, "list_sponsors", { stage: i.options.getString("stage") ?? undefined })) as { name: string; stage: string; amount: string | null; tier: string | null; lastContactAt: Date | null; deliverables: { title: string; done: boolean }[] }[];
-      const body = rows.map((s) => `**${s.name}** · ${s.stage}${s.amount ? ` · $${Number(s.amount).toFixed(0)}` : ""}${s.tier ? ` · ${s.tier}` : ""}${s.lastContactAt ? ` · last contact <t:${Math.floor(new Date(s.lastContactAt).getTime() / 1000)}:R>` : ""}${s.deliverables.length ? `\n　deliverables: ${s.deliverables.map((d) => `${d.done ? "✅" : "⬜"} ${d.title}`).join(", ")}` : ""}`).join("\n");
-      return i.editReply({ embeds: [resultEmbed("outreach", "Sponsor pipeline", body || "No sponsors yet.")] });
+      const stage = i.options.getString("stage") ?? undefined;
+      const rows = (await runToolDirect(org, i, "list_sponsors", { stage })) as SponsorRow[];
+      return i.editReply(await render(sponsorsCard({ sponsors: rows, stage })));
     }
     case "sponsor:followup":
       return emitRequest(org, i, { mode: "agent", agent: "outreach", text: `Find sponsors we have not contacted in ${i.options.getInteger("days") ?? 5} days (stages contacted, replied, negotiating). For each, write a short follow-up email and send it (each send will be approved by a human).` });
     case "sponsor:ask":
       return emitRequest(org, i, { mode: "agent", agent: "outreach", text: i.options.getString("request", true) });
     case "task:list": {
-      const rows = (await runToolDirect(org, i, "list_tasks", { overdueOnly: i.options.getBoolean("overdue") ?? false })) as { title: string; status: string; ownerName: string | null; ownerDiscordId: string | null; dueAt: Date | null; overdue: boolean }[];
-      const body = rows.map((t) => `${t.overdue ? "🔴" : t.status === "done" ? "✅" : "⬜"} **${t.title}** · ${t.ownerDiscordId ? `<@${t.ownerDiscordId}>` : t.ownerName ?? "unassigned"}${t.dueAt ? ` · due <t:${Math.floor(new Date(t.dueAt).getTime() / 1000)}:R>` : ""}`).join("\n");
-      return i.editReply({ embeds: [resultEmbed("coordination", "Tasks", body || "No tasks.")] });
+      const overdueOnly = i.options.getBoolean("overdue") ?? false;
+      const rows = (await runToolDirect(org, i, "list_tasks", { overdueOnly })) as TaskRow[];
+      // Owners' Discord avatars as section thumbnails, best effort.
+      const avatars = new Map<string, string>();
+      await Promise.all([...new Set(rows.map((t) => t.ownerDiscordId).filter((x): x is string => !!x))].map((id) =>
+        i.client.users.fetch(id).then((u) => avatars.set(id, u.displayAvatarURL({ size: 128, extension: "png" }))).catch(() => undefined)));
+      const tasks = rows.map((t) => ({ ...t, avatarUrl: t.ownerDiscordId ? avatars.get(t.ownerDiscordId) : undefined }));
+      return i.editReply(await render(tasksCard({ tasks, overdueOnly })));
     }
     case "task:add": {
       const owner = i.options.getUser("owner");
@@ -108,9 +116,10 @@ async function onCommand(i: ChatInputCommandInteraction) {
     case "cal:today": {
       const start = new Date(); start.setHours(0, 0, 0, 0);
       const end = new Date(start); end.setDate(end.getDate() + 1);
-      const rows = (await runToolDirect(org, i, "list_events", { from: start.toISOString(), to: end.toISOString() })) as { title: string; start: string; end: string; location?: string }[] | { error: string };
-      const body = Array.isArray(rows) ? rows.map((e) => `**${e.title}** <t:${Math.floor(new Date(e.start).getTime() / 1000)}:t>–<t:${Math.floor(new Date(e.end).getTime() / 1000)}:t>${e.location ? ` · ${e.location}` : ""}`).join("\n") : rows.error;
-      return i.editReply({ embeds: [resultEmbed("calendar", "Today", body || "Nothing scheduled.")] });
+      const rows = (await runToolDirect(org, i, "list_events", { from: start.toISOString(), to: end.toISOString() })) as EventRow[] | { error: string };
+      if (!Array.isArray(rows)) return i.editReply({ embeds: [resultEmbed("calendar", "Today", rows.error)] });
+      const calendarUrl = org.calendarId ? `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(org.calendarId)}` : undefined;
+      return i.editReply(await render(calendarCard({ events: rows, dayStart: start.getTime(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, calendarUrl })));
     }
     case "cal:add":
       return emitRequest(org, i, { mode: "agent", agent: "calendar", text: i.options.getString("request", true) });
@@ -184,14 +193,50 @@ async function loadRun(runId: string) {
   return run;
 }
 
+type Run = typeof schema.runs.$inferSelect;
+type Interactive = ButtonInteraction | StringSelectMenuInteraction | ModalSubmitInteraction;
+
+/** Re-render a plan message: a V2 card, or the legacy embed for messages posted before the migration. */
+async function updatePlan(i: Interactive, run: Run, plan: Plan, decision?: PlanDecision) {
+  if (!("update" in i)) return;
+  if (i.message?.embeds.length) {
+    const status = decision ? `${decision.approved ? "Approved" : "Cancelled"} by ${decision.by}` : undefined;
+    return i.update({ embeds: [planEmbed(run.id, run.request, plan, status)], components: decision ? [] : planComponents(run.id, plan) });
+  }
+  return i.update(await renderEdit(planCard({
+    runId: run.id, request: run.request, plan, requester: { discordId: run.actorDiscordId }, createdAt: run.createdAt,
+    decision, dashboardUrl: dashboardRunUrl(run.id),
+  })));
+}
+
+/** Re-render an approval message with its decision (buttons removed). */
+async function updateApproval(i: Interactive, action: typeof schema.actions.$inferSelect, decision: ApprovalDecision, args?: Record<string, unknown>) {
+  if (!("update" in i)) return;
+  if (i.message?.embeds.length) {
+    const embed = i.message.embeds[0];
+    const label = decision.status === "edited" ? "✏️ Edited and approved" : decision.status === "rejected" ? "❌ Rejected" : "✅ Approved";
+    return i.update({ content: `${label} by ${decision.by}`, embeds: embed ? [embed] : [], components: [] });
+  }
+  const [org] = await db().select().from(schema.orgs).where(eq(schema.orgs.id, action.orgId));
+  if (!org) return i.update({ components: [] });
+  return i.update(await renderEdit(await approvalCardFor(org, action, decision, args)));
+}
+
 async function onButton(customId: string, i: ButtonInteraction) {
-  const [kind, verb, id] = customId.split(":");
+  const [kind, verb, id, sub] = customId.split(":");
   if (kind === "plan" && id) {
     const run = await loadRun(id);
     if (!run?.plan) return i.reply({ content: "This plan no longer exists.", ephemeral: true });
     if (verb === "run" || verb === "cancel") {
       await inngest.send({ name: "tether/plan.decided", data: { runId: id, approved: verb === "run", plan: run.plan, deciderDiscordId: i.user.id } });
-      await i.update({ embeds: [planEmbed(id, run.request, run.plan, verb === "run" ? `Approved by ${i.user.displayName}` : `Cancelled by ${i.user.displayName}`)], components: [] });
+      await updatePlan(i, run, run.plan, { approved: verb === "run", by: i.user.displayName, at: new Date() });
+      return;
+    }
+    if (verb === "toggle" && sub) {
+      if (run.status !== "proposed") return i.reply({ content: `This plan is already ${run.status}.`, ephemeral: true });
+      const plan: Plan = { ...run.plan, steps: run.plan.steps.map((s) => (s.id === sub ? { ...s, enabled: !s.enabled } : s)) };
+      await db().update(schema.runs).set({ plan, updatedAt: new Date() }).where(eq(schema.runs.id, id));
+      await updatePlan(i, run, plan);
       return;
     }
     if (verb === "edit") {
@@ -209,8 +254,7 @@ async function onButton(customId: string, i: ButtonInteraction) {
     if (action.status !== "pending") return i.reply({ content: `Already ${action.status}.`, ephemeral: true });
     if (verb === "approve" || verb === "reject") {
       await inngest.send({ name: "tether/action.decided", data: { actionId: id, runId: action.runId, approved: verb === "approve", deciderDiscordId: i.user.id, deciderName: i.user.displayName } });
-      const embed = i.message.embeds[0];
-      await i.update({ content: `${verb === "approve" ? "✅ Approved" : "❌ Rejected"} by ${i.user.displayName}`, embeds: embed ? [embed] : [], components: [] });
+      await updateApproval(i, action, { status: verb === "approve" ? "approved" : "rejected", by: i.user.displayName, at: new Date() });
       return;
     }
     if (verb === "edit") {
@@ -235,7 +279,7 @@ async function onSelect(customId: string, values: string[], i: StringSelectMenuI
   if (!run?.plan) return i.reply({ content: "Plan not found.", ephemeral: true });
   const plan: Plan = { ...run.plan, steps: run.plan.steps.map((s) => ({ ...s, enabled: values.includes(s.id) })) };
   await db().update(schema.runs).set({ plan, updatedAt: new Date() }).where(eq(schema.runs.id, id));
-  await i.update({ embeds: [planEmbed(id, run.request, plan)], components: planComponents(id, plan) });
+  await updatePlan(i, run, plan);
 }
 
 async function onModal(customId: string, i: ModalSubmitInteraction) {
@@ -248,7 +292,7 @@ async function onModal(customId: string, i: ModalSubmitInteraction) {
       return v ? { ...s, instruction: v } : s;
     }) };
     await db().update(schema.runs).set({ plan, planHistory: [...run.planHistory, plan], updatedAt: new Date() }).where(eq(schema.runs.id, id));
-    if (i.isFromMessage()) await i.update({ embeds: [planEmbed(id, run.request, plan)], components: planComponents(id, plan) });
+    if (i.isFromMessage()) await updatePlan(i, run, plan);
     else await i.reply({ content: "Plan updated.", ephemeral: true });
     return;
   }
@@ -260,7 +304,7 @@ async function onModal(customId: string, i: ModalSubmitInteraction) {
     if (raw) { try { editedArgs = JSON.parse(raw); } catch { return i.reply({ content: "Invalid JSON.", ephemeral: true }); } }
     else editedArgs = { subject: i.fields.getTextInputValue("subject"), body: i.fields.getTextInputValue("body") };
     await inngest.send({ name: "tether/action.decided", data: { actionId: id, runId: action.runId, approved: true, editedArgs, deciderDiscordId: i.user.id, deciderName: i.user.displayName } });
-    if (i.isFromMessage()) await i.update({ content: `✏️ Edited and approved by ${i.user.displayName}`, components: [] });
+    if (i.isFromMessage()) await updateApproval(i, action, { status: "edited", by: i.user.displayName, at: new Date() }, { ...action.args, ...editedArgs });
     else await i.reply({ content: "Edited and approved.", ephemeral: true });
   }
 }

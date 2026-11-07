@@ -11,3 +11,6 @@ coverage/
 .turbo/
 infra/caddy_data/
 .entire/settings.local.json
+
+# discord:preview output
+apps/server/.preview/

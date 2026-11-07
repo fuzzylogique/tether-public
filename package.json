@@ -17,6 +17,8 @@
     "db:seed": "pnpm --filter @tether/core db:seed",
     "demo:reset": "pnpm --filter @tether/core demo:reset",
     "discord:register": "pnpm --filter @tether/server discord:register",
+    "discord:preview": "pnpm --filter @tether/server discord:preview",
+    "discord:emoji": "pnpm --filter @tether/server discord:emoji",
     "discord:channels": "pnpm --filter @tether/server discord:channels",
     "eval:plans": "pnpm --filter @tether/core eval:plans",
     "google:auth": "pnpm --filter @tether/core google:auth",
