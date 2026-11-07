@@ -33,4 +33,10 @@ export type Events = {
   "tether/task.overdue": { data: { orgId: string; taskId: string } };
 };
 
-export const inngest = new Inngest({ id: "tether", schemas: new EventSchemas().fromRecord<Events>() });
+export const isInngestDev = process.env.INNGEST_DEV === "1" || process.env.INNGEST_DEV === "true";
+
+export const inngest = new Inngest({
+  id: "tether",
+  schemas: new EventSchemas().fromRecord<Events>(),
+  isDev: isInngestDev,
+});

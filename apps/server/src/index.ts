@@ -1,5 +1,4 @@
-import { config } from "dotenv";
-config({ path: new URL("../../../.env", import.meta.url).pathname });
+import "./env.js";
 
 import { Hono } from "hono";
 import { serve as serveNode } from "@hono/node-server";

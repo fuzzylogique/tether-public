@@ -30,7 +30,7 @@ const checks: Check[] = [
       if (!e.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY empty");
       const { GoogleGenAI } = await import("@google/genai");
       const ai = new GoogleGenAI({ apiKey: e.GEMINI_API_KEY });
-      const r = await ai.models.generateContent({ model: e.GEMINI_MODEL_AGENT ?? "gemini-3.8-flash", contents: "Reply with the single word: ready" });
+      const r = await ai.models.generateContent({ model: e.GEMINI_MODEL_AGENT ?? "gemini-3.6-flash", contents: "Reply with the single word: ready" });
       return `${e.GEMINI_MODEL_AGENT} says "${(r.text ?? "").trim().slice(0, 30)}"`;
     },
   },
