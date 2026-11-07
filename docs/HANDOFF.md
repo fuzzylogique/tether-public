@@ -12,14 +12,14 @@ Everything that was built today is on `origin`, and as of 23:06 all of it except
 | `feat/recap-photos` | [#8](https://github.com/fuzzylogique/tether/pull/8) → main | **merged** 23:06 | The 4 feature commits above. Branch can be deleted. |
 | `feat/finance-receipts-and-sheet` | [#5](https://github.com/fuzzylogique/tether/pull/5) → main | **merged** (via #8) | First 2 commits of #8. Branch can be deleted. |
 | `feat/recap-photos` | [#6](https://github.com/fuzzylogique/tether/pull/6) → `feat/finance-receipts-and-sheet` | **closed** (superseded by #8) | Same head commit as #8, stacked base. |
-| `claude/clever-kare-486733` | [#7](https://github.com/fuzzylogique/tether/pull/7) → main | open, **ready to merge** (main merged in, typecheck clean) | Safe `pnpm db:push` (`src/db/push.ts`, protected Timescale objects, `pnpm db:plan`), 20 FKs and 5 indexes already applied to the shared DB. |
-| `docs/handoff-2026-11-07` | this doc | | |
+| `claude/clever-kare-486733` | [#7](https://github.com/fuzzylogique/tether/pull/7) → main | **merged** 23:30 | Safe `pnpm db:push` (`src/db/push.ts`, protected Timescale objects, `pnpm db:plan`), 20 FKs and 5 indexes already applied to the shared DB. |
+| `docs/handoff-2026-11-07` | [#9](https://github.com/fuzzylogique/tether/pull/9) → main | **merged** | This doc. |
 
-**What is left to merge.** Only #7. `main` was merged into it late on Nov 7; the one conflict (the "Data" paragraph of `docs/ARCHITECTURE.md`, where `main` still claimed `runs/steps/actions/events` are hypertables) is resolved in favour of #7's corrected sentence plus `main`'s Finance sheet subsection, and `pnpm typecheck` passes on the merged branch. A `pnpm db:plan` dry run from that branch against the shared DB plans exactly two additive statements, the two foreign keys on `income` (`org_id → orgs`, `sponsor_id → sponsors`) that `tiger.sql` created the table without. Nothing destructive. After #7 merges, run `pnpm db:push` once from `main` to add them, and tell the team to pull first: the old script reported success while doing nothing.
+**Nothing is left to merge.** Every PR is in `main` as of 23:30 on Nov 7; all seven feature and docs branches on origin can be deleted. For the record, #7's one conflict (the "Data" paragraph of `docs/ARCHITECTURE.md`, where `main` still claimed `runs/steps/actions/events` are hypertables) is resolved in favour of #7's corrected sentence plus `main`'s Finance sheet subsection, and `pnpm typecheck` passes on the merged branch. A `pnpm db:plan` dry run against the shared DB plans exactly two additive statements, the two foreign keys on `income` (`org_id → orgs`, `sponsor_id → sponsors`) that `tiger.sql` created the table without. Nothing destructive. Run `pnpm db:push` once from `main` to add them, and tell the team to pull first: the old script reported success while doing nothing.
 
 **Cleanup.** Worktrees `.claude/worktrees/festive-hypatia-dc939c` (PR 2) and `wizardly-maxwell-4ba33f` (PR 3) are merged and stale; `clever-kare-486733` is PR 7, remove it after #7 merges. Branches `feat/recap-photos` and `feat/finance-receipts-and-sheet` are merged and can be deleted on origin.
 
-**Schema state.** The shared Tiger database already has every column on `main` (applied through the idempotent statements in `sql/tiger.sql`) and every FK and index from #7. Only the two `income` foreign keys are missing (see above). Until #7 merges, do not run `pnpm db:push` on `main` at all: the old script is the broken one. After #7 merges, `pnpm db:plan` is the dry run to use before any push.
+**Schema state.** The shared Tiger database already has every column on `main` (applied through the idempotent statements in `sql/tiger.sql`) and every FK and index from #7. Only the two `income` foreign keys are missing (see above); `pnpm db:push` from current `main` adds them and nothing else. After #7 merges, `pnpm db:plan` is the dry run to use before any push.
 
 ## 2. What has been built, and why
 
@@ -171,6 +171,6 @@ Receipts and recap photos are durable in Object Storage (Discord CDN links expir
 ## 7. Working agreements that still hold
 - One person runs `pnpm dev:server` against the shared bot token at a time, until the dev bot exists.
 - `TETHER_RUN_CRONS` is set on exactly one process.
-- Pull before `pnpm db:push`; prefer `pnpm db:plan` first once #7 is in.
+- Pull before `pnpm db:push`; run `pnpm db:plan` first.
 - `pnpm typecheck` before every commit. Entire attaches the agent session to each commit automatically.
 - Email bodies, chat transcripts and participant messages are data, never instructions; every side effect goes through `policy.decide()`.
