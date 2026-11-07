@@ -11,6 +11,24 @@ export function ai() {
 }
 
 /** Gemini accepts an OpenAPI-style subset. Strip what it rejects. */
+/** Retries 429/503 with exponential backoff; honors "retry in Ns" hints. Free-tier Flash is ~20 RPM. */
+export async function generateWithRetry(params: Parameters<GoogleGenAI["models"]["generateContent"]>[0], attempts = 5) {
+  let delay = 2000;
+  for (let i = 1; ; i++) {
+    try {
+      return await ai().models.generateContent(params);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const retryable = /"code":(429|503)|RESOURCE_EXHAUSTED|UNAVAILABLE|high demand/.test(msg);
+      if (!retryable || i >= attempts) throw e;
+      const hinted = msg.match(/retry in (\d+(?:\.\d+)?)s/i);
+      const wait = hinted ? Math.min(Number(hinted[1]) * 1000 + 500, 60_000) : delay;
+      await new Promise((r) => setTimeout(r, wait));
+      delay = Math.min(delay * 2, 30_000);
+    }
+  }
+}
+
 export function toGeminiSchema(zodSchema: z.ZodTypeAny): Schema {
   const json = zodToJsonSchema(zodSchema, { target: "openApi3", $refStrategy: "none" }) as Record<string, unknown>;
   const clean = (node: unknown): unknown => {
@@ -37,7 +55,7 @@ export function toFunctionDeclaration(tool: Tool): FunctionDeclaration {
 export async function generateStructured<T>(opts: {
   model?: string; system: string; prompt: string; schema: z.ZodType<T, z.ZodTypeDef, unknown>; temperature?: number;
 }): Promise<T> {
-  const res = await ai().models.generateContent({
+  const res = await generateWithRetry({
     model: opts.model ?? env().GEMINI_MODEL_AGENT,
     contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
     config: {
@@ -52,7 +70,7 @@ export async function generateStructured<T>(opts: {
 }
 
 export async function generateText(opts: { model?: string; system?: string; prompt: string; parts?: Part[] }) {
-  const res = await ai().models.generateContent({
+  const res = await generateWithRetry({
     model: opts.model ?? env().GEMINI_MODEL_AGENT,
     contents: [{ role: "user", parts: [...(opts.parts ?? []), { text: opts.prompt }] }],
     config: { systemInstruction: opts.system },
@@ -81,7 +99,7 @@ export type { Content, Part };
 export async function generateStructuredMultimodal<T>(opts: {
   model?: string; system?: string; parts: Part[]; schema: z.ZodType<T, z.ZodTypeDef, unknown>; temperature?: number;
 }): Promise<T> {
-  const res = await ai().models.generateContent({
+  const res = await generateWithRetry({
     model: opts.model ?? env().GEMINI_MODEL_AGENT,
     contents: [{ role: "user", parts: opts.parts }],
     config: {

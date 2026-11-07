@@ -1,5 +1,5 @@
 import type { Content, Part } from "@google/genai";
-import { ai, toFunctionDeclaration } from "./gemini.js";
+import { generateWithRetry, toFunctionDeclaration } from "./gemini.js";
 import { env } from "../env.js";
 import type { AgentDef } from "../agents/registry.js";
 import type { ToolCtx } from "../tools/types.js";
@@ -45,7 +45,7 @@ export async function runAgentLoop(input: {
 
   for (let turn = input.turnOffset ?? 0; turn < agent.maxTurns; turn++) {
     const res = await step(`${agent.name}:llm:${turn}`, async () => {
-      const r = await ai().models.generateContent({
+      const r = await generateWithRetry({
         model: env().GEMINI_MODEL_AGENT,
         contents: messages,
         config: { systemInstruction: system, tools: declarations.length ? [{ functionDeclarations: declarations }] : undefined, temperature: 0.3 },

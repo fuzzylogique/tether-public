@@ -2,7 +2,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { defineTool } from "./types.js";
 import { brandKits } from "../db/schema.js";
-import { ai, generateStructured } from "../runtime/gemini.js";
+import { generateWithRetry, generateStructured } from "../runtime/gemini.js";
 import { env } from "../env.js";
 import { putObject } from "../storage.js";
 
@@ -39,7 +39,7 @@ export const generateHeroImage = defineTool({
   summarize: (a) => `Generate hero image (${a.aspect})`,
   async execute(args, ctx) {
     const [kit] = await ctx.db.select().from(brandKits).where(eq(brandKits.orgId, ctx.org.id));
-    const res = await ai().models.generateContent({
+    const res = await generateWithRetry({
       model: env().GEMINI_MODEL_IMAGE,
       contents: `${args.prompt}. Flat, modern poster background, palette ${kit?.primaryColor ?? "#6D5DF6"} and ${kit?.secondaryColor ?? "#0EA5A4"}, no text, no letters, aspect ${args.aspect}.`,
     });

@@ -23,6 +23,7 @@ const fixtures: { request: string; agents: string[]; mustDepend?: [string, strin
 
 let valid = 0, tp = 0, fp = 0, fn = 0, depOk = 0, depTotal = 0;
 for (const f of fixtures) {
+  await new Promise((r) => setTimeout(r, 3000)); // pace for free-tier RPM
   try {
     const { plan, attempts } = await draftPlan(f.request);
     valid++;
