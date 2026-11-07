@@ -20,7 +20,14 @@ finance, outreach, socials, calendar, coordination, helpdesk, builder (stretch).
 `policies` table: (org, tool, condition, decision). Defaults in `policy/defaults.ts`. Loosening requires the lead role.
 
 ## Data
-Tiger Cloud Postgres. `runs/steps/actions/events` are hypertables. `documents` uses pgvector + pg_textsearch hybrid search. Mirror tables: `budget_lines`, `expenses`, `sponsors`, `sponsor_threads`, `tasks`, `calendar_events`.
+Tiger Cloud Postgres. `runs/steps/actions/events` are hypertables. `documents` uses pgvector + pg_textsearch hybrid search. Mirror tables: `budget_lines`, `expenses`, `income`, `sponsors`, `sponsor_threads`, `tasks`, `calendar_events`.
+
+### Finance sheet
+`pnpm sheet:create` builds (or upgrades) the org Google Sheet from the mirror; re-running it adds missing tabs and rewrites headers and formulas.
+- `Budget`: Category, Allocated.
+- `Expenses`: Date, Category, Amount (total incl. tax), Vendor, Description, Receipt (Vultr Object Storage URL), Logged by, Tax, Paid by, Reimbursement (`pending`/`paid`). Columns are only ever appended so older sheets keep syncing.
+- `Income`: Date, Source, Amount, Status (`pledged`/`invoiced`/`received`), Notes. Sponsor money goes here via `log_income`, never into Expenses.
+- `Summary`: formulas only (per-category spend, totals, HST paid, income, net position, reimbursements owed per person). Organizers can edit the data tabs by hand and `sync_budget_from_sheet` validates every cell before replacing the mirror in one transaction.
 
 ## Infra
 Vultr VM → Docker Compose (server, web, caddy). Inngest Cloud. Auth0 for dashboard + roles. Single organizer Google account (refresh token). GoDaddy domain → Caddy.

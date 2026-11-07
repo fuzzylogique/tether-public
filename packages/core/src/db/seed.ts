@@ -2,7 +2,7 @@ import { config } from "dotenv";
 config({ path: new URL("../../../../.env", import.meta.url).pathname });
 import { and, eq } from "drizzle-orm";
 import { db } from "./client.js";
-import { orgs, users, budgetLines, expenses, sponsors, tasks, brandKits, policies, documents } from "./schema.js";
+import { orgs, users, budgetLines, expenses, income, sponsors, tasks, brandKits, policies, documents } from "./schema.js";
 import { embed } from "../runtime/gemini.js";
 
 const guildId = process.env.DISCORD_DEV_GUILD_ID;
@@ -39,18 +39,26 @@ await d.insert(budgetLines).values([
   { orgId: org!.id, category: "Marketing", allocated: "600.00" },
 ]);
 await d.delete(expenses).where(eq(expenses.orgId, org!.id));
+// amount is the total paid (HST included); tax is the 13% Ontario HST line. Sam fronted the swag order.
 await d.insert(expenses).values([
-  { orgId: org!.id, category: "Food", amount: "1850.00", vendor: "Pizza Nova", description: "Friday dinner", date: "2026-11-06" },
-  { orgId: org!.id, category: "Swag", amount: "920.00", vendor: "Stickermule", description: "Stickers + lanyards", date: "2026-11-01" },
-  { orgId: org!.id, category: "Marketing", amount: "140.00", vendor: "Meta Ads", description: "Launch promo", date: "2026-10-20" },
+  { orgId: org!.id, category: "Food", amount: "1850.00", tax: "212.83", vendor: "Pizza Nova", description: "Friday dinner", date: "2026-11-06" },
+  { orgId: org!.id, category: "Swag", amount: "920.00", tax: "105.84", vendor: "Stickermule", description: "Stickers + lanyards", date: "2026-11-01", paidBy: "Sam", reimbursement: "pending" },
+  { orgId: org!.id, category: "Marketing", amount: "140.00", tax: "16.11", vendor: "Meta Ads", description: "Launch promo", date: "2026-10-20" },
 ]);
 
 await d.delete(sponsors).where(eq(sponsors.orgId, org!.id));
-await d.insert(sponsors).values([
+const seededSponsors = await d.insert(sponsors).values([
   { orgId: org!.id, name: "Shopify", contactName: "Priya N.", contactEmail: sponsorEmail ?? "priya@example.com", stage: "negotiating", amount: "2000.00", tier: "Gold", lastContactAt: new Date(Date.now() - 6 * 86400_000), deliverables: [] },
   { orgId: org!.id, name: "Vultr", contactName: "Sam R.", contactEmail: "sam@example.com", stage: "confirmed", amount: "1500.00", tier: "Silver", lastContactAt: new Date(Date.now() - 2 * 86400_000), deliverables: [{ title: "Logo on website", done: true }, { title: "Social mention", done: false }, { title: "Booth table", done: false }] },
   { orgId: org!.id, name: "TigerData", contactName: "Ana L.", contactEmail: "ana@example.com", stage: "contacted", amount: null, tier: null, lastContactAt: new Date(Date.now() - 9 * 86400_000), deliverables: [] },
   { orgId: org!.id, name: "Local Bakery", contactName: "Jo", contactEmail: "jo@example.com", stage: "lead", amount: null, tier: null, lastContactAt: null, deliverables: [] },
+]).returning();
+
+// Money in so far: the confirmed sponsor has paid, plus the student union grant. Shopify is still negotiating, so nothing is logged for them.
+await d.delete(income).where(eq(income.orgId, org!.id));
+await d.insert(income).values([
+  { orgId: org!.id, source: "Trent Student Union grant", amount: "2500.00", status: "received", date: "2026-10-15", notes: "Annual club allocation" },
+  { orgId: org!.id, source: "Vultr sponsorship (Silver)", sponsorId: seededSponsors.find((x) => x.name === "Vultr")?.id, amount: "1500.00", status: "received", date: "2026-10-28" },
 ]);
 
 await d.delete(tasks).where(eq(tasks.orgId, org!.id));

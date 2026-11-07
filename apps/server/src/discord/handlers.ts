@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import {
   agentNames, agents, approvalCardFor, budgetCard, buildToolCtx, calendarCard, dashboardRunUrl, db, getTool, inngest, loadActor,
   loadOrgByGuild, planCard, schema, sponsorsCard, tasksCard,
-  type ApprovalDecision, type BudgetRow, type EventRow, type Plan, type PlanDecision, type SponsorRow, type TaskRow,
+  type ApprovalDecision, type BudgetExtras, type BudgetRow, type EventRow, type Plan, type PlanDecision, type SponsorRow, type TaskRow,
 } from "@tether/core";
 import { planEmbed, resultEmbed } from "./embeds.js";
 import { planComponents } from "./notifier.js";
@@ -80,7 +80,7 @@ async function onCommand(i: ChatInputCommandInteraction) {
   switch (`${i.commandName}:${sub ?? ""}`) {
     case "budget:summary": {
       const category = i.options.getString("category") ?? undefined;
-      const r = (await runToolDirect(org, i, "budget_summary", { category })) as { rows: BudgetRow[]; totals: { allocated: number; spent: number; remaining: number } };
+      const r = (await runToolDirect(org, i, "budget_summary", { category })) as { rows: BudgetRow[]; totals: { allocated: number; spent: number; remaining: number } } & BudgetExtras;
       const sheetUrl = org.sheetId ? `https://docs.google.com/spreadsheets/d/${org.sheetId}` : undefined;
       return i.editReply(await render(budgetCard({ ...r, sheetUrl, category })));
     }

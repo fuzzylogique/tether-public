@@ -151,6 +151,29 @@ export const expenses = pgTable("expenses", {
   description: text("description"),
   date: text("date"), // ISO date
   receiptUrl: text("receipt_url"),
+  // Tax portion of `amount` (HST on Ontario receipts); amount is always the total paid.
+  tax: numeric("tax", { precision: 12, scale: 2 }),
+  // Who fronted the money when an organizer paid out of pocket; null when paid from the org account.
+  paidBy: text("paid_by"),
+  reimbursement: text("reimbursement").$type<ReimbursementStatus>().default("none").notNull(),
+  sheetRow: integer("sheet_row"),
+  loggedByDiscordId: text("logged_by_discord_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ReimbursementStatus = "none" | "pending" | "paid";
+export type IncomeStatus = "pledged" | "invoiced" | "received";
+
+// Money coming in: sponsorship payments, club funding, ticket sales. Mirror of the Income sheet tab.
+export const income = pgTable("income", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id").references(() => orgs.id).notNull(),
+  source: text("source").notNull(),
+  sponsorId: uuid("sponsor_id").references(() => sponsors.id),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  status: text("status").$type<IncomeStatus>().default("pledged").notNull(),
+  date: text("date"), // ISO date
+  notes: text("notes"),
   sheetRow: integer("sheet_row"),
   loggedByDiscordId: text("logged_by_discord_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
