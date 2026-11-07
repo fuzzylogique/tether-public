@@ -125,6 +125,11 @@ async function onCommand(i: ChatInputCommandInteraction) {
       return emitRequest(org, i, { mode: "agent", agent: "calendar", text: i.options.getString("request", true) });
     case "post:draft":
       return emitRequest(org, i, { mode: "agent", agent: "socials", text: `Draft a ${i.options.getString("platform") ?? "instagram"} post. Brief: ${i.options.getString("brief", true)}. Generate copy and a hero image, then post the announcement (will be approved).` });
+    case "post:recap": {
+      const n = i.options.getInteger("photos") ?? 4;
+      const brief = i.options.getString("brief") ?? "Recap of the event so far";
+      return emitRequest(org, i, { mode: "agent", agent: "socials", text: `Create a ${i.options.getString("platform") ?? "instagram"} recap post from the team's photos. Brief: ${brief}. List the event photos, pick the best ${n} with captions, write copy that matches them, then post the announcement with those photos (will be approved).` });
+    }
     case "plan:":
       return emitRequest(org, i, { mode: "auto", text: i.options.getString("request", true) });
     case "agent:": {
@@ -150,7 +155,7 @@ async function onTether(i: ChatInputCommandInteraction, org: Org | undefined) {
   if (sub === "setup") {
     await i.deferReply({ ephemeral: true });
     const channels = { ...(org?.channels ?? {}) };
-    for (const k of ["ops", "announcements", "sponsorship"]) { const ch = i.options.getChannel(k); if (ch) channels[k] = ch.id; }
+    for (const k of ["ops", "announcements", "sponsorship", "photos"]) { const ch = i.options.getChannel(k); if (ch) channels[k] = ch.id; }
     const values = {
       guildId: i.guildId!, name: i.options.getString("name") ?? org?.name ?? i.guild?.name ?? "Event",
       sheetId: i.options.getString("sheet_id") ?? org?.sheetId, calendarId: i.options.getString("calendar_id") ?? org?.calendarId, channels,

@@ -4,7 +4,8 @@ import { defineTool } from "./types.js";
 import { budgetLines, expenses, income, sponsors, type IncomeStatus, type ReimbursementStatus } from "../db/schema.js";
 import { appendRow, clearRow, readRange, updateRange } from "../google/sheets.js";
 import { generateStructuredMultimodal } from "../runtime/gemini.js";
-import { storageHost, uploadObject } from "../storage.js";
+import { uploadObject } from "../storage.js";
+import { extensionFor, fetchTrustedMedia } from "../media.js";
 
 // Sheet layout (columns are appended, never reordered, so older sheets keep working):
 //   Budget   A Category | B Allocated
@@ -194,17 +195,6 @@ const receiptSchema = z.object({
   suggestedCategory: z.string().describe("One of the org budget categories if obvious, else best guess"),
 });
 
-// Receipt bytes come from the Discord CDN (or our own bucket), never from an arbitrary URL the model chose.
-const RECEIPT_HOSTS = ["cdn.discordapp.com", "media.discordapp.net"];
-const MAX_RECEIPT_BYTES = 10 * 1024 * 1024;
-
-function allowedReceiptHost(url: string): boolean {
-  let host: string;
-  try { host = new URL(url).hostname; } catch { return false; }
-  const own = storageHost();
-  return RECEIPT_HOSTS.includes(host) || (!!own && host === own);
-}
-
 export const parseReceipt = defineTool({
   name: "parse_receipt",
   description: "Read the receipt image attached to the message, extract vendor, total, tax, date and line items, and keep a durable copy of the image. Pass the returned receiptUrl (and tax) to log_expense.",
@@ -215,20 +205,16 @@ export const parseReceipt = defineTool({
     const att = ctx.attachments?.find((a) => a.contentType?.startsWith("image/"));
     const url = args.imageUrl ?? att?.url;
     if (!url) return { error: "No receipt image attached" };
-    if (!allowedReceiptHost(url)) return { error: "Receipt images must be Discord attachments" };
-
-    const res = await fetch(url);
-    if (!res.ok) return { error: `Could not fetch the receipt image (HTTP ${res.status})` };
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > MAX_RECEIPT_BYTES) return { error: "Receipt image is larger than 10 MB" };
-    const mimeType = res.headers.get("content-type")?.split(";")[0] || att?.contentType || "image/jpeg";
+    // Receipt bytes come from the Discord CDN (or our own bucket), never from an arbitrary URL the model chose.
+    const fetched = await fetchTrustedMedia(url, { mimeHint: att?.contentType });
+    if ("error" in fetched) return fetched;
+    const { buf, mimeType } = fetched;
 
     // Discord CDN links are signed and expire within hours, so the sheet would end up with dead links.
     // Store a copy in Vultr Object Storage when it is configured; otherwise keep the original URL.
     let stored: string | undefined;
     try {
-      const ext = (mimeType.split("/")[1] ?? "jpg").replace("jpeg", "jpg");
-      stored = await uploadObject(`receipts/${ctx.org.id}/${Date.now()}.${ext}`, buf, mimeType);
+      stored = await uploadObject(`receipts/${ctx.org.id}/${Date.now()}.${extensionFor(mimeType)}`, buf, mimeType);
     } catch (e) {
       console.warn("[parse_receipt] object storage upload failed, keeping Discord URL:", e instanceof Error ? e.message : e);
     }

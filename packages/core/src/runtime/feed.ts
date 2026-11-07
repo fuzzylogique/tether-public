@@ -8,6 +8,7 @@ export const TEAM_CHANNELS = [
   { key: "finance", name: "finance", topic: "Expenses logged and budget syncs." },
   { key: "sponsorship", name: "sponsorship", topic: "Sponsor pipeline changes, inbound replies, and sent emails." },
   { key: "socials", name: "socials", topic: "Post drafts and generated images." },
+  { key: "photos", name: "photos", topic: "Drop event photos here. The socials agent picks recap photos from this channel." },
 ] as const;
 
 /** Which team channel an agent's side effects are reported to. */

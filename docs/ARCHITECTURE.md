@@ -36,6 +36,7 @@ Vultr VM → Docker Compose (server, web, caddy). Inngest Cloud. Auth0 for dashb
 1. Receipt photo → finance logs expense, budget status.
 2. "Shopify confirmed $2k, kick off onboarding" → plan card → untick one step → run → emails await approval → calendar + sheet + post update.
 3. Overdue task → nudge DM → no response → escalate to lead.
+4. `/post recap` → socials lists the photos the team dropped in `#photos` → Gemini vision picks the best four with captions and stores durable copies in Object Storage → copy written to match → approval card showing all four → announcement. Hero image generation is the fallback when there is nothing to photograph yet, and it skips gracefully on a free-tier key.
 
 ## Team seams
 A: engine, planner, gateway (core/runtime). B: tools, mirror, watchers (core/tools, core/google). C: web + Auth0. D: Discord adapter, seed data, demo.

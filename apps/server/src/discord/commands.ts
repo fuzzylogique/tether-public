@@ -33,6 +33,11 @@ export const commands = [
     .addSubcommand((s) => s.setName("draft").setDescription("Draft a post with image")
       .addStringOption((o) => o.setName("brief").setDescription("What the post is about").setRequired(true))
       .addStringOption((o) => o.setName("platform").setDescription("Platform").addChoices(
+        { name: "instagram", value: "instagram" }, { name: "linkedin", value: "linkedin" }, { name: "twitter", value: "twitter" }, { name: "discord", value: "discord" })))
+    .addSubcommand((s) => s.setName("recap").setDescription("Recap post from the photos in #photos")
+      .addStringOption((o) => o.setName("brief").setDescription("What to recap, e.g. 'Day 1: opening ceremony and late-night hacking'"))
+      .addIntegerOption((o) => o.setName("photos").setDescription("How many photos (1-8, default 4)").setMinValue(1).setMaxValue(8))
+      .addStringOption((o) => o.setName("platform").setDescription("Platform").addChoices(
         { name: "instagram", value: "instagram" }, { name: "linkedin", value: "linkedin" }, { name: "twitter", value: "twitter" }, { name: "discord", value: "discord" }))),
 
   new SlashCommandBuilder().setName("plan").setDescription("Multi-step request: Tether proposes a plan you approve")
@@ -49,7 +54,8 @@ export const commands = [
       .addStringOption((o) => o.setName("calendar_id").setDescription("Google Calendar id"))
       .addChannelOption((o) => o.setName("ops").setDescription("Ops channel (escalations)"))
       .addChannelOption((o) => o.setName("announcements").setDescription("Announcements channel"))
-      .addChannelOption((o) => o.setName("sponsorship").setDescription("Sponsorship channel")))
+      .addChannelOption((o) => o.setName("sponsorship").setDescription("Sponsorship channel"))
+      .addChannelOption((o) => o.setName("photos").setDescription("Channel where the team drops event photos")))
     .addSubcommand((s) => s.setName("bind").setDescription("Bind a channel to an agent (Tier 1)")
       .addChannelOption((o) => o.setName("channel").setDescription("Channel").setRequired(true))
       .addStringOption((o) => o.setName("agent").setDescription("Agent").setRequired(true).setAutocomplete(true)))
