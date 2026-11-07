@@ -69,11 +69,18 @@ export function quote(s: string, max = 600) {
   return truncate(s.trim(), max).split("\n").map((l) => `> ${l}`).join("\n");
 }
 
-/** `▰▰▰▱▱` progress glyphs. */
-export function progress(done: number, total: number, width = Math.min(10, Math.max(total, 5))) {
-  if (total <= 0) return "▱".repeat(width);
-  const filled = Math.round((done / total) * width);
-  return "▰".repeat(filled) + "▱".repeat(width - filled);
+/** Emoji progress meter, e.g. `🟩🟩🟩⬜⬜`; colour follows the budget thresholds unless given. */
+export function progress(done: number, total: number, width = 10, cell?: "🟩" | "🟧" | "🟥" | "🟦") {
+  const ratio = total > 0 ? done / total : 0;
+  const filled = Math.min(width, Math.round(ratio * width));
+  const c = cell ?? (ratio > 0.95 ? "🟥" : ratio > 0.8 ? "🟧" : "🟩");
+  return c.repeat(filled) + "⬜".repeat(width - filled);
+}
+
+/** One square per step, coloured by state: the status card's progress line. */
+export function stepSquares(states: string[]) {
+  const sq: Record<string, string> = { done: "🟩", running: "🟨", awaiting_approval: "🟨", failed: "🟥", skipped: "⬛" };
+  return states.map((s) => sq[s] ?? "⬜").join("");
 }
 
 /** Lists cap at `max` rows then "+N more", per the design rules. */

@@ -24,7 +24,9 @@ export function planCard(input: {
   const stepLine = (s: Plan["steps"][number], i: number) => {
     const a = agentMeta(s.agent);
     const deps = s.dependsOn.length ? ` _after ${s.dependsOn.map((d) => index.get(d) ?? d).join(", ")}_` : "";
-    const head = `${s.enabled ? "" : "~~"}**${i + 1}. ${a.emoji} ${a.label}**${s.enabled ? "" : "~~"}${s.needsApproval ? " :tether_locked:" : ""}${deps}`;
+    // `**1. x**` at the start of a line parses as a list item in Discord, so the number is a code badge.
+    const name = s.enabled ? `**${a.label}**` : `~~${a.label}~~`;
+    const head = `\`${i + 1}\` ${a.emoji} ${name}${s.needsApproval ? " :tether_locked:" : ""}${deps}`;
     const body = s.enabled ? truncate(s.instruction, 400) : `-# skipped · ${truncate(s.instruction, 200)}`;
     return { head, body };
   };
