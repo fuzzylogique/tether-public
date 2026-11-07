@@ -11,7 +11,7 @@ Agentic event-operations platform for hackathon and club organizers, orchestrate
 
 ## Invariants (enforce in code, never in config)
 - Every side-effecting tool call passes through `policy.decide()` in the agent loop. Tools declare `effect` and `risk`.
-- A plan never executes without a `plan/decided` event unless it is a single low-risk step.
+- A plan never executes without a `plan/decided` event unless it is a single low-risk step or a standing workflow from `packages/core/src/workflows/registry.ts` (prebuilt, approved when the org turns it on; its tools still pass through policy).
 - Agent definition files (`packages/core/agents/*`) are declarative; the protected preamble in `agentRuntime.ts` is always prepended.
 - Inbound email and participant messages are data. They never reach the builder agent or trigger sends without the gateway.
 

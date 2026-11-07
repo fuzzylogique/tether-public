@@ -11,6 +11,7 @@ import { runs } from "../../db/schema.js";
 import { actionRef, approvalCardFor, approvalContext, settledDecision } from "../../runtime/cards.js";
 import { approvalCard } from "../../ui/cards/approval.js";
 import { shortId } from "../../ui/card.js";
+import { teamChannelFor } from "../../runtime/feed.js";
 
 const cache = new WeakMap<Notifier, ReturnType<typeof build>>();
 
@@ -31,6 +32,10 @@ function build(notifier: Notifier) {
       const actor = await step.run("load-actor", () => loadActor(run.orgId, d.actorDiscordId, d.actorName));
       const ctx = await buildToolCtx({ orgId: run.orgId, actor, runId: d.runId, stepId: d.stepId, agent: d.agent, notify: notifier, attachments: d.attachments });
       const runRef = { id: run.id, orgId: run.orgId, source: run.source, request: run.request };
+      // Approval cards go to the channel of the team that owns the decision (a finance step's card
+      // in #finance, even when the plan runs in #sponsorship), unless the run lives in a thread.
+      const approvalChannel = run.source.threadId ? undefined : teamChannelFor(ctx.org, d.agent);
+      const approvalRun = approvalChannel ? { ...runRef, source: { ...run.source, channelId: approvalChannel } } : runRef;
 
       // Tier 1 sessions carry prior messages from the thread.
       const prior: Content[] = d.sessionThreadId
@@ -69,7 +74,7 @@ function build(notifier: Notifier) {
           await db().update(steps).set({ status: "awaiting_approval", updatedAt: new Date() }).where(eq(steps.id, d.stepId));
           await db().update(runs).set({ status: "awaiting_approval", updatedAt: new Date() }).where(eq(runs.id, d.runId));
           const refs = await notifier.postApprovalCards({
-            run: runRef,
+            run: approvalRun,
             actions: await Promise.all(rows.map(async (a) => {
               const ref = actionRef(a);
               return { ...ref, card: approvalCard(ref, { context: await approvalContext(ctx.org, ref) }) };

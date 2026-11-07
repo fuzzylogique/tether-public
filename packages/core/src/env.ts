@@ -17,6 +17,9 @@ const schema = z.object({
   TETHER_RUN_CRONS: z.string().optional(),
   MONITOR_TASKS_CRON: z.string().default("*/15 * * * *"),
   MONITOR_MAIL_CRON: z.string().default("*/2 * * * *"),
+  // Daily inbox digest; 14:00 UTC is 9am Toronto in November. Blank disables it.
+  DIGEST_CRON: z.string().default("0 14 * * *"),
+  DIGEST_HOURS: z.coerce.number().int().positive().default(24),
   NUDGE_INTERVAL_MIN: z.coerce.number().int().positive().default(120),
   ESCALATE_AFTER_NUDGES: z.coerce.number().int().min(1).default(2),
   DISCORD_TOKEN: z.string().default(""),

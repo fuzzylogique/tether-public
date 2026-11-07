@@ -20,13 +20,13 @@ export function handleRequestFn(notifier: Notifier) {
         const [row] = await db().insert(runs).values({
           orgId: d.orgId, trigger: d.trigger, source: d.source, actorDiscordId: d.actorDiscordId, request: d.text, status: "proposed",
         }).returning();
-        await db().insert(events).values({ orgId: d.orgId, runId: row!.id, kind: "run_created", data: { trigger: d.trigger, mode: d.mode, attachments: d.attachments } });
+        await db().insert(events).values({ orgId: d.orgId, runId: row!.id, kind: "run_created", data: { trigger: d.trigger, mode: d.mode, attachments: d.attachments, contextChars: d.context?.length ?? 0 } });
         return row!;
       });
 
       let plan: Plan = await step.run("draft-plan", async () => {
         if (d.mode === "agent" && d.agent) return singleStepPlan(d.agent, d.text);
-        const { plan } = await draftPlan(d.text);
+        const { plan } = await draftPlan(d.text, d.context);
         return plan;
       });
       await step.run("save-plan", () => db().update(runs).set({ plan, planHistory: [plan], updatedAt: new Date() }).where(eq(runs.id, run.id)));

@@ -15,6 +15,8 @@ export const orgs = pgTable("orgs", {
   channels: jsonb("channels").$type<Record<string, string>>().default({}).notNull(),
   // channel id -> agent name (Tier 1 bindings)
   channelAgents: jsonb("channel_agents").$type<Record<string, string>>().default({}).notNull(),
+  // team key (lead, finance, sponsorship, socials, logistics) -> Discord role id, created by `/tether channels`
+  roles: jsonb("roles").$type<Record<string, string>>().default({}).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -46,7 +48,7 @@ export type RunStatus =
 export const runs = pgTable("runs", {
   id: uuid("id").primaryKey().defaultRandom(),
   orgId: uuid("org_id").references(() => orgs.id).notNull(),
-  trigger: text("trigger").notNull(), // slash | mention | thread | cron | watcher
+  trigger: text("trigger").notNull(), // slash | mention | thread | cron | watcher | workflow | dm
   // where to render: { channelId, messageId, threadId, statusMessageId, planMessageId }
   source: jsonb("source").$type<Record<string, string | undefined>>().default({}).notNull(),
   actorUserId: uuid("actor_user_id").references(() => users.id),
@@ -231,6 +233,10 @@ export const tasks = pgTable("tasks", {
   nudgeCount: integer("nudge_count").default(0).notNull(),
   lastNudgedAt: timestamp("last_nudged_at", { withTimezone: true }),
   escalated: boolean("escalated").default(false).notNull(),
+  // What the owner said the last time they answered a nudge (DM or reply in #tasks), and when.
+  lastReply: text("last_reply"),
+  lastReplyAt: timestamp("last_reply_at", { withTimezone: true }),
+  notes: text("notes"),
   sheetRow: integer("sheet_row"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

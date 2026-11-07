@@ -1,9 +1,12 @@
-import { and, eq, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { inngest } from "../client.js";
 import { db } from "../../db/client.js";
 import { events, orgs, processedMail, sponsors, sponsorThreads, tasks } from "../../db/schema.js";
 import { searchMail } from "../../google/gmail.js";
 import { env } from "../../env.js";
+import { buildInboxDigest } from "../../runtime/digest.js";
+import { digestCard } from "../../ui/cards/digest.js";
+import type { Notifier } from "../../tools/types.js";
 
 // Both monitors are registered only on the process that sets TETHER_RUN_CRONS=1
 // (see ./index.ts). Every other instance serving /api/inngest never sees them.
@@ -55,21 +58,27 @@ export const monitorTasksFn = inngest.createFunction(
     let dispatched = 0;
     let lost = 0;
     for (const { task: t, opsChannelId } of ready) {
-      // Claim: stamp last_nudged_at only if nobody else has within the interval. Exactly one
-      // overlapping tick wins per task; the others see no row and move on. This also advances the
-      // clock when the agent run later fails or the tool is denied, so the next cycle still waits.
+      // Claim: stamp last_nudged_at and bump nudge_count only if nobody else has within the interval.
+      // Exactly one overlapping tick wins per task; the others see no row and move on. The counter
+      // lives here, not in the nudge tool, so escalation never depends on the model echoing the
+      // task title back: a failed run or a denied tool still advances the clock and the count.
       const claimed = await step.run(`claim-${t.id}`, async () => {
-        const rows = await db().update(tasks).set({ lastNudgedAt: new Date() })
+        // escalated flips here, not in the escalate tool, so a denied or skipped tool call can never
+        // make the same task escalate again on the next tick.
+        const rows = await db().update(tasks).set({ lastNudgedAt: new Date(), nudgeCount: sql`${tasks.nudgeCount} + 1`, escalated: sql`${tasks.nudgeCount} + 1 > ${ESCALATE_AFTER_NUDGES}` })
           .where(and(eq(tasks.id, t.id), eq(tasks.escalated, false), ne(tasks.status, "done"), or(isNull(tasks.lastNudgedAt), lt(tasks.lastNudgedAt, nudgeCutoff()))))
-          .returning({ id: tasks.id, nudgeCount: tasks.nudgeCount, status: tasks.status });
+          .returning({ id: tasks.id, nudgeCount: tasks.nudgeCount, status: tasks.status, lastReply: tasks.lastReply, lastReplyAt: tasks.lastReplyAt });
         return rows[0] ?? null;
       });
       if (!claimed) { lost++; continue; }
       const owner = `<@${t.ownerDiscordId}> (discord id ${t.ownerDiscordId})`;
-      const escalate = claimed.nudgeCount >= ESCALATE_AFTER_NUDGES;
+      const due = `<t:${Math.floor(new Date(t.dueAt!).getTime() / 1000)}:f>`;
+      const reply = claimed.lastReply ? ` The owner's last reply (${claimed.lastReplyAt ? new Date(claimed.lastReplyAt).toISOString() : "earlier"}) was: "${claimed.lastReply.slice(0, 200)}".` : "";
+      // nudgeCount is already bumped: this tick sends nudge #nudgeCount, and the one after the last allowed nudge escalates.
+      const escalate = claimed.nudgeCount > ESCALATE_AFTER_NUDGES;
       const instruction = escalate
-        ? `Task "${t.title}" owned by ${owner} was due ${t.dueAt} and has been nudged ${claimed.nudgeCount} times without being completed. Escalate to the lead with a one-line summary.`
-        : `Task "${t.title}" owned by ${owner} was due ${t.dueAt} and is still ${claimed.status}. Send the owner a friendly nudge asking for an ETA (nudge #${claimed.nudgeCount + 1}).`;
+        ? `Task "${t.title}" owned by ${owner} was due ${due} and has been nudged ${claimed.nudgeCount - 1} times without being completed.${reply} Escalate to the lead with a one-line summary (taskTitle "${t.title}"). Do not nudge the owner again.`
+        : `Task "${t.title}" owned by ${owner} was due ${due} and is still ${claimed.status}.${reply} Send the owner one friendly nudge asking for an ETA (this is nudge #${claimed.nudgeCount} of ${ESCALATE_AFTER_NUDGES}; pass taskTitle "${t.title}"). Use the Discord timestamp token ${due} verbatim for the due date. Tell them they can reply to the message with an ETA, "done", or "can't do it".`;
       await step.sendEvent(`nudge-${t.id}`, {
         name: "tether/request.received",
         data: { orgId: t.orgId, trigger: "cron", mode: "agent", agent: "coordination", text: instruction, source: { channelId: opsChannelId } },
@@ -132,3 +141,35 @@ export const pollSponsorMailFn = inngest.createFunction(
     return { dispatched, duplicates };
   },
 );
+
+const digestCache = new WeakMap<Notifier, ReturnType<typeof buildDigestFn>>();
+
+function buildDigestFn(notifier: Notifier) {
+  return inngest.createFunction(
+    { id: "inbox-digest", concurrency: { limit: 1 } },
+    { cron: env().DIGEST_CRON || "0 14 * * *" },
+    async ({ step }) => {
+      if (!env().GOOGLE_REFRESH_TOKEN) return { skipped: "no google credentials" };
+      const allOrgs = await step.run("orgs", () => db().select().from(orgs));
+      // One inbox serves every org on this instance (single organizer Google account), so the
+      // digest is built once and posted to each org that has somewhere to put it.
+      const targets = allOrgs.map((o) => ({ orgId: o.id, channelId: o.channels["digest"] ?? o.channels["ops"] })).filter((t): t is { orgId: string; channelId: string } => !!t.channelId);
+      if (!targets.length) return { skipped: "no ops channel configured" };
+      const digest = await step.run("build", () => buildInboxDigest({ hours: env().DIGEST_HOURS }));
+      for (const t of targets) {
+        await step.run(`post-${t.orgId}`, async () => {
+          await notifier.postToChannel({ channelId: t.channelId, card: digestCard(digest) });
+          await db().insert(events).values({ orgId: t.orgId, kind: "inbox_digest", agent: "outreach", data: { scanned: digest.scanned, needsAction: digest.items.filter((i) => i.needsAction).length, hours: digest.windowHours } });
+        });
+      }
+      return { scanned: digest.scanned, posted: targets.length };
+    },
+  );
+}
+
+/** Daily inbox digest to #ops (or a `digest` channel). Registered with the other crons. */
+export function inboxDigestFn(notifier: Notifier) {
+  let fn = digestCache.get(notifier);
+  if (!fn) { fn = buildDigestFn(notifier); digestCache.set(notifier, fn); }
+  return fn;
+}

@@ -59,3 +59,9 @@ CREATE TABLE IF NOT EXISTS income (
   logged_by_discord_id text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Nudge replies and team roles (additive; see the note above about drizzle-kit push).
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS last_reply text;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS last_reply_at timestamptz;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE orgs ADD COLUMN IF NOT EXISTS roles jsonb NOT NULL DEFAULT '{}'::jsonb;
