@@ -41,6 +41,12 @@ Or, in the Claude desktop app, the three configs in `.claude/launch.json`.
 - `@tether Shopify confirmed $2k gold, kick off onboarding` or `/plan ...` — Tier 2 plan card → Run → approval cards
 - Receipts: `/budget receipt image:<photo>` (vision)
 
+## 4b. Seeing what Tether did (no Google login needed)
+Google is authorized on Fayez's account only, so Tether mirrors everything into Discord:
+- **Team channels** under the *Tether* category: `#ops` (escalations), `#tasks` (task updates + nudges, owners are @mentioned here instead of DMed), `#calendar`, `#finance`, `#sponsorship`, `#socials`. Every side effect an agent executes posts a one-liner with a link to its team channel.
+- **`/tether links`** prints the shared links: the team calendar (public, read-only; add the `.ics` URL in Google Calendar → Other calendars → From URL to see it alongside yours), the org sheet, and the Drive folder (anyone with the link can view).
+- Admin: `pnpm google:share` (re)creates the shared calendar/folder; `/tether channels` or `pnpm discord:channels` (re)creates the team channels. Both are idempotent.
+
 ## 5. Gemini free-tier rules (important)
 - `gemini-3.7-flash`, `gemini-3.8-flash`, `gemini-flash-latest`: **20 requests/day each** — do not use.
 - Pro models and image models: **0** on free tier.

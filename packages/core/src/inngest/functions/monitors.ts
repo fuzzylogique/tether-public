@@ -25,7 +25,7 @@ export const monitorTasksFn = inngest.createFunction(
         : `Task "${t.title}" owned by ${owner} was due ${t.dueAt} and is still ${t.status}. Send the owner a friendly nudge asking for an ETA (nudge #${t.nudgeCount + 1}).`;
       await step.sendEvent(`nudge-${t.id}`, {
         name: "tether/request.received",
-        data: { orgId: org.id, trigger: "cron", mode: "agent", agent: "coordination", text: instruction, source: { channelId: org.channels["ops"] } },
+        data: { orgId: org.id, trigger: "cron", mode: "agent", agent: "coordination", text: instruction, source: { channelId: org.channels["tasks"] ?? org.channels["ops"] } },
       });
     }
     return { overdue: overdue.length };
