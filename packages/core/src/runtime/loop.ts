@@ -5,6 +5,7 @@ import type { AgentDef } from "../agents/registry.js";
 import type { ToolCtx } from "../tools/types.js";
 import { decide } from "../policy/engine.js";
 import { actions, events } from "../db/schema.js";
+import { postActivity } from "./feed.js";
 
 /** Memoized step runner (Inngest `step.run` in production, identity in tests/eval). */
 export type StepRunner = <T>(id: string, fn: () => Promise<T>) => Promise<T>;
@@ -95,6 +96,7 @@ export async function runAgentLoop(input: {
 
       const out = await step(`${agent.name}:tool:${turn}:${i}:${tool.name}`, async () => {
         const result = await tool.execute(args, ctx).catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
+        await postActivity(ctx, tool, args, result);
         await ctx.db.insert(events).values({ orgId: ctx.org.id, runId: ctx.runId, kind: "tool_call", agent: agent.name, data: { tool: tool.name, args, error: (result as { error?: string })?.error } });
         return result;
       });
@@ -130,6 +132,7 @@ export async function settleAction(input: {
     try {
       const r = await tool.execute(args, ctx);
       await ctx.db.update(actions).set({ status: "executed", args, decidedAt: new Date(), executedAt: new Date(), result: r as Record<string, unknown>, decisionNote: input.note, approverDiscordId: ctx.actor.discordId }).where(eq(actions.id, action.id));
+      await postActivity({ ...ctx, agent: action.agent }, tool, args, r);
       return { ok: true, r };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

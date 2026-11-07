@@ -40,9 +40,9 @@ export const monitorTasksFn = inngest.createFunction(
       const skipped: { orgId: string; taskId: string; title: string; reason: string }[] = [];
       for (const t of due) {
         const org = orgById.get(t.orgId);
-        const opsChannelId = org?.channels["ops"];
+        const opsChannelId = org?.channels["tasks"] ?? org?.channels["ops"];
         if (!org) skipped.push({ orgId: t.orgId, taskId: t.id, title: t.title, reason: "org missing" });
-        else if (!opsChannelId) skipped.push({ orgId: t.orgId, taskId: t.id, title: t.title, reason: "no ops channel configured" });
+        else if (!opsChannelId) skipped.push({ orgId: t.orgId, taskId: t.id, title: t.title, reason: "no tasks or ops channel configured" });
         else if (!t.ownerDiscordId) skipped.push({ orgId: t.orgId, taskId: t.id, title: t.title, reason: "no ownerDiscordId" });
         else ready.push({ task: t, opsChannelId });
       }

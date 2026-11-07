@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "discord:register": "tsx src/discord/register.ts",
     "discord:preview": "tsx src/discord/ui/preview.ts",
-    "discord:emoji": "tsx src/discord/ui/emoji-upload.ts"
+    "discord:emoji": "tsx src/discord/ui/emoji-upload.ts",
+    "discord:channels": "tsx src/discord/provision.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",

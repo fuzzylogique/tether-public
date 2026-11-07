@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NonRetriableError } from "inngest";
 import { generateStructured } from "./gemini.js";
 import { env } from "../env.js";
 import { agents } from "../agents/registry.js";
@@ -84,12 +85,21 @@ export async function draftPlan(request: string, context?: string): Promise<{ pl
     const prompt = attempt === 1
       ? `${context ? `Context:\n${context}\n\n` : ""}Request:\n${request}`
       : `Your previous plan had errors: ${errors.join("; ")}. Fix them.\n\nPrevious plan:\n${JSON.stringify(lastDraft)}\n\nRequest:\n${request}`;
-    const draft = await generateStructured({ model: env().GEMINI_MODEL_PLANNER, system: systemPrompt(), prompt, schema: planSchema });
+    let draft: PlanDraft;
+    try {
+      draft = await generateStructured({ model: env().GEMINI_MODEL_PLANNER, system: systemPrompt(), prompt, schema: planSchema });
+    } catch (e) {
+      // Malformed JSON or schema mismatch: use the second attempt instead of throwing into an Inngest retry.
+      if (!(e instanceof z.ZodError || e instanceof SyntaxError)) throw e;
+      errors = [`response did not match the plan schema: ${e.message.slice(0, 300)}`];
+      continue;
+    }
     lastDraft = draft;
     errors = validatePlan(draft);
     if (!errors.length) return { plan: toPlan(draft), attempts: attempt, errors: [] };
   }
-  throw new Error(`planner failed validation: ${errors.join("; ")}`);
+  // Both attempts were paid for; retrying the whole request would just pay for two more.
+  throw new NonRetriableError(`planner failed validation: ${errors.join("; ")}`);
 }
 
 /** Tier 0/1: a prebuilt one-step plan that bypasses the orchestrator. */

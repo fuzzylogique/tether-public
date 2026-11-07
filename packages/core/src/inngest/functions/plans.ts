@@ -60,12 +60,17 @@ function build(notifier: Notifier) {
               actorDiscordId: run.actorDiscordId ?? undefined,
               sessionThreadId: run.trigger === "thread" ? run.source.threadId : undefined,
             },
-          }),
+          // Swallow a child that exhausted its own retries: rethrowing would make this function's
+          // retry start a fresh child run and repeat every Gemini call it already paid for.
+          }).catch((e: unknown) => ({ status: "failed" as const, output: `Failed: ${e instanceof Error ? e.message : String(e)}`, crashed: true })),
         ));
         for (const [i, s] of level.entries()) {
           const r = results[i]!;
+          if ("crashed" in r) {
+            await step.run(`mark-crashed-${s.id}`, () => db().update(steps).set({ status: "failed", output: r.output, updatedAt: new Date() }).where(eq(steps.id, stepIdByKey[s.id]!)));
+          }
           outputs[s.id] = r.output;
-          Object.assign(state[s.id]!, { status: r.status === "done" ? "done" : "failed", finishedAt: r.finishedAt });
+          Object.assign(state[s.id]!, { status: r.status === "done" ? "done" : "failed", finishedAt: "finishedAt" in r ? r.finishedAt : undefined });
         }
       }
 
@@ -86,7 +91,9 @@ function build(notifier: Notifier) {
 
       // Tier 1 escalation: a single agent said the rest needs other agents.
       const needsPlan = Object.values(outputs).map((o) => o.match(/NEEDS_PLAN:\s*(.+)$/m)?.[1]).find(Boolean);
-      if (needsPlan && plan.steps.length === 1 && run.trigger !== "cron") {
+      // One hop only: a follow-up that again comes back as a single step must not re-escalate forever.
+      const isFollowUp = run.request.includes("(Follow-up from ");
+      if (needsPlan && plan.steps.length === 1 && run.trigger !== "cron" && !isFollowUp) {
         await step.sendEvent("escalate-to-plan", {
           name: "tether/request.received",
           data: { orgId: run.orgId, trigger: "mention", mode: "auto", text: `${run.request}\n\n(Follow-up from ${plan.steps[0]!.agent}: ${needsPlan})`, source: run.source, actorDiscordId: run.actorDiscordId ?? undefined },
