@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, lt, ne } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import { inngest } from "../client.js";
 import { db } from "../../db/client.js";
 import { events, orgs, processedMail, sponsors, sponsorThreads, tasks } from "../../db/schema.js";
@@ -14,17 +14,22 @@ import { env } from "../../env.js";
  * instead of spawning a run that can only fail (`nudge_owner` needs a discord id, the notifier
  * needs a channel). Interval and escalation threshold come from NUDGE_INTERVAL_MIN and
  * ESCALATE_AFTER_NUDGES so the demo can run on a 2-minute cadence.
+ *
+ * Ticks can overlap: the Inngest dev server replays every missed minute in one burst after a
+ * network blip, and prod retries do the same. So each task is *claimed* with a conditional
+ * UPDATE on last_nudged_at before anything is dispatched, and the function runs one at a time.
  */
 export const monitorTasksFn = inngest.createFunction(
-  { id: "monitor-tasks" },
+  { id: "monitor-tasks", concurrency: { limit: 1 } },
   { cron: env().MONITOR_TASKS_CRON },
   async ({ step }) => {
     const { NUDGE_INTERVAL_MIN, ESCALATE_AFTER_NUDGES } = env();
+    const nudgeCutoff = () => new Date(Date.now() - NUDGE_INTERVAL_MIN * 60_000);
 
     const { ready, skipped } = await step.run("find-overdue", async () => {
       const now = new Date();
       const rows = await db().select().from(tasks).where(and(ne(tasks.status, "done"), isNotNull(tasks.dueAt), lt(tasks.dueAt, now), eq(tasks.escalated, false)));
-      const cutoff = Date.now() - NUDGE_INTERVAL_MIN * 60_000;
+      const cutoff = nudgeCutoff().getTime();
       const due = rows.filter((t) => !t.lastNudgedAt || t.lastNudgedAt.getTime() < cutoff);
 
       const orgIds = [...new Set(due.map((t) => t.orgId))];
@@ -47,21 +52,31 @@ export const monitorTasksFn = inngest.createFunction(
       return { ready, skipped };
     });
 
+    let dispatched = 0;
+    let lost = 0;
     for (const { task: t, opsChannelId } of ready) {
+      // Claim: stamp last_nudged_at only if nobody else has within the interval. Exactly one
+      // overlapping tick wins per task; the others see no row and move on. This also advances the
+      // clock when the agent run later fails or the tool is denied, so the next cycle still waits.
+      const claimed = await step.run(`claim-${t.id}`, async () => {
+        const rows = await db().update(tasks).set({ lastNudgedAt: new Date() })
+          .where(and(eq(tasks.id, t.id), eq(tasks.escalated, false), ne(tasks.status, "done"), or(isNull(tasks.lastNudgedAt), lt(tasks.lastNudgedAt, nudgeCutoff()))))
+          .returning({ id: tasks.id, nudgeCount: tasks.nudgeCount, status: tasks.status });
+        return rows[0] ?? null;
+      });
+      if (!claimed) { lost++; continue; }
       const owner = `<@${t.ownerDiscordId}> (discord id ${t.ownerDiscordId})`;
-      const escalate = t.nudgeCount >= ESCALATE_AFTER_NUDGES;
+      const escalate = claimed.nudgeCount >= ESCALATE_AFTER_NUDGES;
       const instruction = escalate
-        ? `Task "${t.title}" owned by ${owner} was due ${t.dueAt} and has been nudged ${t.nudgeCount} times without being completed. Escalate to the lead with a one-line summary.`
-        : `Task "${t.title}" owned by ${owner} was due ${t.dueAt} and is still ${t.status}. Send the owner a friendly nudge asking for an ETA (nudge #${t.nudgeCount + 1}).`;
+        ? `Task "${t.title}" owned by ${owner} was due ${t.dueAt} and has been nudged ${claimed.nudgeCount} times without being completed. Escalate to the lead with a one-line summary.`
+        : `Task "${t.title}" owned by ${owner} was due ${t.dueAt} and is still ${claimed.status}. Send the owner a friendly nudge asking for an ETA (nudge #${claimed.nudgeCount + 1}).`;
       await step.sendEvent(`nudge-${t.id}`, {
         name: "tether/request.received",
         data: { orgId: t.orgId, trigger: "cron", mode: "agent", agent: "coordination", text: instruction, source: { channelId: opsChannelId } },
       });
-      // Advance the clock here, not only inside nudge_owner: if the agent run fails or the tool is
-      // denied, the next cycle must still wait NUDGE_INTERVAL_MIN instead of re-dispatching.
-      await step.run(`mark-nudged-${t.id}`, () => db().update(tasks).set({ lastNudgedAt: new Date() }).where(eq(tasks.id, t.id)));
+      dispatched++;
     }
-    return { dispatched: ready.length, skipped: skipped.length };
+    return { dispatched, skipped: skipped.length, claimedElsewhere: lost };
   },
 );
 
@@ -72,7 +87,7 @@ export const monitorTasksFn = inngest.createFunction(
  * so the same Gmail message can never be dispatched twice, whatever `sponsor_threads` says.
  */
 export const pollSponsorMailFn = inngest.createFunction(
-  { id: "poll-sponsor-mail" },
+  { id: "poll-sponsor-mail", concurrency: { limit: 1 } },
   { cron: env().MONITOR_MAIL_CRON },
   async ({ step }) => {
     if (!env().GOOGLE_REFRESH_TOKEN) return { skipped: "no google credentials" };
