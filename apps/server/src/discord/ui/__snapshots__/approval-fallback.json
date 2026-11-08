@@ -1,0 +1,59 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 8353757,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Update sponsor Vultr → confirmed\n-# 🤝 Sponsorship outreach wants to run `update_sponsor` · risk low"
+        },
+        {
+          "type": 10,
+          "content": "**sponsorName**  Vultr\n**stage**  confirmed\n**amount**  1500\n**tier**  Silver"
+        },
+        {
+          "type": 10,
+          "content": "**deliverables**\n```json\n[\n  {\n    \"title\": \"Logo on website\",\n    \"done\": true\n  },\n  {\n    \"title\": \"Social mention\",\n    \"done\": false\n  },\n  {\n    \"title\": \"Booth table\",\n    \"done\": false\n  }\n]\n```"
+        },
+        {
+          "type": 10,
+          "content": "-# write · action a1b2c3d4"
+        },
+        {
+          "type": 1,
+          "components": [
+            {
+              "type": 2,
+              "label": "Approve",
+              "custom_id": "action:approve:a1b2c3d4-000e-4000-8000-000000000000",
+              "style": 3,
+              "disabled": false
+            },
+            {
+              "type": 2,
+              "label": "Edit",
+              "custom_id": "action:edit:a1b2c3d4-000e-4000-8000-000000000000",
+              "style": 2,
+              "disabled": false
+            },
+            {
+              "type": 2,
+              "label": "Reject",
+              "custom_id": "action:reject:a1b2c3d4-000e-4000-8000-000000000000",
+              "style": 4,
+              "disabled": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "files": []
+}

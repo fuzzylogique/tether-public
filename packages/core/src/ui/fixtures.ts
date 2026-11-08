@@ -58,7 +58,7 @@ const steps = (statuses: StepState["status"][]): StepState[] =>
   DEMO_PLAN.steps.filter((s) => s.enabled).map((s, i) => ({ id: s.id, agent: s.agent, instruction: s.instruction, status: statuses[i] ?? "pending", finishedAt: statuses[i] === "done" || statuses[i] === "failed" ? NOW - (4 - i) * MIN : undefined }));
 
 const action = (tool: string, agent: string, summary: string, risk: ActionRef["risk"], args: Record<string, unknown>, effect: ActionRef["effect"] = "external"): ActionRef =>
-  ({ id: `a1b2c3d4-${tool.length.toString(16).padStart(4, "0")}-4000-8000-000000000000`, tool, agent, summary, risk, effect, args });
+  ({ id: `a1b2c3d4-${tool.length.toString(16).padStart(4, "0")}-4000-8000-000000000000`, tool, agent, summary, risk, effect, args, ...(risk === "high" ? { approverRole: "lead" } : {}) });
 
 export const APPROVALS = {
   email: action("send_email", "outreach", "Send email to priya@shopify.com: \"Welcome aboard, Shopify!\"", "high", {

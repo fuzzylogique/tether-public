@@ -1,0 +1,134 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 14830410,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Tasks\n-# 4 open · 1 overdue"
+        },
+        {
+          "type": 12,
+          "items": [
+            {
+              "media": {
+                "url": "attachment://task-status.png"
+              },
+              "description": "To do 2, In progress 1, Blocked 1, Done 1"
+            }
+          ]
+        },
+        {
+          "type": 10,
+          "content": "### 🔴 Overdue · 1"
+        },
+        {
+          "type": 9,
+          "components": [
+            {
+              "type": 10,
+              "content": "**Confirm judge list**"
+            },
+            {
+              "type": 10,
+              "content": "-# Alex · was due <t:1794058200:R> · in progress"
+            }
+          ],
+          "accessory": {
+            "type": 11,
+            "media": {
+              "url": "https://cdn.discordapp.com/embed/avatars/1.png"
+            },
+            "description": "Alex"
+          }
+        },
+        {
+          "type": 10,
+          "content": "### 🟠 Due today · 1"
+        },
+        {
+          "type": 9,
+          "components": [
+            {
+              "type": 10,
+              "content": "**Print name badges**"
+            },
+            {
+              "type": 10,
+              "content": "-# Sam · due <t:1794090600:R>"
+            }
+          ],
+          "accessory": {
+            "type": 11,
+            "media": {
+              "url": "https://cdn.discordapp.com/embed/avatars/2.png"
+            },
+            "description": "Sam"
+          }
+        },
+        {
+          "type": 10,
+          "content": "### Later · 2"
+        },
+        {
+          "type": 9,
+          "components": [
+            {
+              "type": 10,
+              "content": "**Book A/V for closing ceremony**"
+            },
+            {
+              "type": 10,
+              "content": "-# Jordan · due <t:1794184200:R> · ⛔ blocked"
+            }
+          ],
+          "accessory": {
+            "type": 11,
+            "media": {
+              "url": "https://cdn.discordapp.com/embed/avatars/3.png"
+            },
+            "description": "Jordan"
+          }
+        },
+        {
+          "type": 9,
+          "components": [
+            {
+              "type": 10,
+              "content": "**Send Shopify booth requirements**"
+            },
+            {
+              "type": 10,
+              "content": "-# Sam · due <t:1794421800:R>"
+            }
+          ],
+          "accessory": {
+            "type": 11,
+            "media": {
+              "url": "https://cdn.discordapp.com/embed/avatars/2.png"
+            },
+            "description": "Sam"
+          }
+        },
+        {
+          "type": 10,
+          "content": "-# ✅ 1 done"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "name": "task-status.png",
+      "bytes": 11720,
+      "sha256": "63fab79fa805d657a6a5330e574ac2f9977463e79a525b0b44807ab33bb98718"
+    }
+  ]
+}

@@ -32,9 +32,7 @@ export async function refreshRunCard(runId: string, notifier: Notifier) {
     return [{ stepKey, summary: a.summary, channelId: ref?.channelId, url: ref && org ? messageUrl(org.guildId, ref.channelId, ref.messageId) : undefined }];
   });
 
-  // The row says running or awaiting_approval; the steps decide which it really is right now.
-  const live = run.status === "running" || run.status === "awaiting_approval";
-  const status = live ? (states.some((s) => s.status === "awaiting_approval") ? "awaiting_approval" : "running") : run.status;
+  const status = deriveRunStatus(run.status, states.map((s) => s.status));
 
   await notifier.updateStatus({
     run: { id: run.id, orgId: run.orgId, source: run.source, request: run.request },
@@ -44,4 +42,14 @@ export async function refreshRunCard(runId: string, notifier: Notifier) {
       stoppedBy: run.status === "cancelled" && run.cancelledBy ? `<@${run.cancelledBy}>` : undefined,
     }),
   });
+}
+
+/**
+ * The run row says `running` or `awaiting_approval`, but several steps flip it independently, so the
+ * steps decide which it really is right now. Any other row status (proposed, done, cancelled…) is final.
+ */
+export function deriveRunStatus(runStatus: string, stepStatuses: string[]): string {
+  const live = runStatus === "running" || runStatus === "awaiting_approval";
+  if (!live) return runStatus;
+  return stepStatuses.some((s) => s === "awaiting_approval") ? "awaiting_approval" : "running";
 }

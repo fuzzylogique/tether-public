@@ -230,7 +230,18 @@ it empty = plain reject. CAS pending→rejected, render, send `action.decided { 
 
 ## 12. Verification
 
-- Unit: card builders for every state in §2 via `ui/fixtures.ts` + `pnpm ui:preview`.
+- Automated, `pnpm test` (node:test, no Discord, no database):
+  - `apps/server/src/discord/ui/cards.test.ts` renders every fixture in `ui/fixtures.ts` through the
+    real Components V2 renderer and diffs the payload JSON against `__snapshots__/<fixture>.json`:
+    text, buttons, custom ids, accent, attachment hashes. `UPDATE_SNAPSHOTS=1` accepts a change.
+  - `packages/core/src/runtime/{edit,cards,status}.test.ts` cover `applyEdit` coercion and the
+    changed-fields list, `settledDecision` for every action status, and `deriveRunStatus`.
+  - `packages/core/src/ui/cards/cards.test.ts` pins the button contract: Stop only while `isLiveRun`,
+    Approve/Edit/Reject only while pending, `↩ Run` when `context.runUrl` is set.
+- Visual, dev guild: `pnpm discord:preview` posts every fixture to #tether-preview. `pnpm discord:compare`
+  posts each card twice, the payload an older commit produced and the current one, so a change can be
+  eyeballed side by side. Build the baseline by running `cards.test.ts` from the old commit with
+  `SNAPSHOT_DIR=apps/server/.preview/baseline UPDATE_SNAPSHOTS=1 SNAPSHOT_FILES=1`.
 - Manual, dev guild: approve twice fast (second gets "already decided"); kill `dev:server` mid-wait,
   restart, approve (still executes: Inngest resumes `waitForEvent`); run `/sponsor followup`, press
   Stop while a card is pending (card → "stopped", status → "Stopped", summary lists executed

@@ -1,0 +1,77 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 1941109,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Budget\n-# $5,740 of $11,600 spent · $5,860 left"
+        },
+        {
+          "type": 12,
+          "items": [
+            {
+              "media": {
+                "url": "attachment://budget-donut.png"
+              },
+              "description": "$5,740 of $11,600 spent"
+            }
+          ]
+        },
+        {
+          "type": 12,
+          "items": [
+            {
+              "media": {
+                "url": "attachment://budget-bars.png"
+              },
+              "description": "Food 46%, Venue 98%, Swag 61%, Prizes 0%, Marketing 87%"
+            }
+          ]
+        },
+        {
+          "type": 10,
+          "content": "**Allocated**  $11,600\n**Spent**  $5,740\n**Remaining**  **$5,860**"
+        },
+        {
+          "type": 10,
+          "content": "🔴 **Venue** is at 98% ($50 left)\n🟠 **Marketing** is at 87% ($80 left)"
+        },
+        {
+          "type": 10,
+          "content": "-# mirror of the budget sheet · synced <t:1794075000:R>"
+        },
+        {
+          "type": 1,
+          "components": [
+            {
+              "type": 2,
+              "label": "Open sheet",
+              "style": 5,
+              "url": "https://docs.google.com/spreadsheets/d/example"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "name": "budget-donut.png",
+      "bytes": 44046,
+      "sha256": "ce030218fa7623645322717487e0115ccf32d5c7387037c48f1c49425169aceb"
+    },
+    {
+      "name": "budget-bars.png",
+      "bytes": 37874,
+      "sha256": "e007452af33e327478f8eaf419abe3e7294e60df8dc495282cf601f2f0d49d40"
+    }
+  ]
+}

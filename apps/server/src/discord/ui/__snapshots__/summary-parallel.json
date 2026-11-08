@@ -1,0 +1,82 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 14830410,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Finished with failures · Status check across finance, outreach and coordination\n-# 3/4 steps succeeded · <t:1794076200:R>"
+        },
+        {
+          "type": 10,
+          "content": "> Status check: budget left, sponsor pipeline, and anything overdue?"
+        },
+        {
+          "type": 14,
+          "divider": true,
+          "spacing": 1
+        },
+        {
+          "type": 10,
+          "content": "### ✅ 💸 Finance\n**$5,860 left** of $11,600. Venue is at 98% and Marketing at 87%."
+        },
+        {
+          "type": 14,
+          "divider": true,
+          "spacing": 1
+        },
+        {
+          "type": 10,
+          "content": "### ✅ 🤝 Sponsorship outreach\nShopify (6 days) and TigerData (9 days) need a follow-up."
+        },
+        {
+          "type": 14,
+          "divider": true,
+          "spacing": 1
+        },
+        {
+          "type": 10,
+          "content": "### ✅ 🧭 Coordination\n1 overdue: *Confirm judge list* (Alex, 5 hours late)."
+        },
+        {
+          "type": 14,
+          "divider": true,
+          "spacing": 1
+        },
+        {
+          "type": 10,
+          "content": "### ❌ 📅 Calendar\nFailed: no calendar configured"
+        },
+        {
+          "type": 12,
+          "items": [
+            {
+              "media": {
+                "url": "attachment://summary-0b1c2d3e.png"
+              },
+              "description": "Outcome: 3/4 steps done"
+            }
+          ]
+        },
+        {
+          "type": 10,
+          "content": "-# run 0b1c2d3e"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "name": "summary-0b1c2d3e.png",
+      "bytes": 32871,
+      "sha256": "de65ac1dd006d089610bb3c38a54ec42b49c9724f47d2ead8ddcbb19229c469a"
+    }
+  ]
+}
