@@ -9,6 +9,7 @@ import { planCard } from "../../ui/cards/plan.js";
 import { statusCard } from "../../ui/cards/status.js";
 import { dashboardRunUrl } from "../../runtime/cards.js";
 import { failRunUnlessCancelled } from "../../runtime/cancel.js";
+import { draftFailureNote } from "../../runtime/gemini.js";
 
 export function handleRequestFn(notifier: Notifier) {
   return inngest.createFunction(
@@ -25,14 +26,24 @@ export function handleRequestFn(notifier: Notifier) {
         return row!;
       });
 
-      let plan: Plan = await step.run("draft-plan", async () => {
+      const runRef = { id: run.id, orgId: run.orgId, source: d.source, request: d.text };
+
+      const draft = await step.run("draft-plan", async () => {
         if (d.mode === "agent" && d.agent) return singleStepPlan(d.agent, d.text);
         const { plan } = await draftPlan(d.text, d.context);
         return plan;
+      }).catch(async (e: unknown) => {
+        const error = e instanceof Error ? e.message : String(e);
+        // No plan means no card yet: without this the run stays `proposed` and the channel hears nothing.
+        await step.run("mark-draft-failed", async () => {
+          const status = await failRunUnlessCancelled(run.id, error);
+          await notifier.updateStatus({ run: runRef, status, card: statusCard({ runId: run.id, request: d.text, status, steps: [], note: draftFailureNote(error) }) });
+        });
+        return null;
       });
+      if (!draft) return { runId: run.id, status: "failed" as const };
+      let plan: Plan = draft;
       await step.run("save-plan", () => db().update(runs).set({ plan, planHistory: [plan], updatedAt: new Date() }).where(eq(runs.id, run.id)));
-
-      const runRef = { id: run.id, orgId: run.orgId, source: d.source, request: d.text };
 
       if (d.mode === "auto" && requiresPlanCard(plan)) {
         const msg = await step.run("post-plan-card", () => notifier.postPlanCard({

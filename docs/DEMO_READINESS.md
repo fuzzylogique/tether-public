@@ -119,6 +119,32 @@ Every other command, with what to expect (no model call unless noted):
 - **#16 `/digest` naming.** Fair: the name says nothing. Cheapest fix is a second registration of the same handler as `/inbox summary` and keeping `/digest` as an alias; the `/help` Commands topic is generated from the registered commands, so it follows.
 - **#17 `/tether status` wording.** Valid; the states exist in the DB (`awaiting_approval`, `proposed`) and only the rendering was wrong. Fixed on this branch for `/tether status`; the status card already says "Waiting for approval" with Jump links. "Scheduled" is not a state we have (crons are not runs until they fire).
 
-## 8. Sponsor tracks, one line each (task 3 preview)
+## 8. Sponsor tracks: what exists, what a judge sees, the gap, the move
 
-GoDaddy: nothing deployed, no domain in `.env`, dashboard links on cards are disabled on `http://localhost`. Vultr: Object Storage proven live tonight; the VM runbook in HANDOFF §5b has never been executed. TigerData: hypertable + continuous aggregate exist and the `agent_activity_hourly` aggregate is still never read (HANDOFF §6.1 is the one-hour visible win). Gemini: the whole engine, plus vision for receipts and recap photos. Auth0: not configured locally (dashboard runs in dev mode); needs the VM. Entire: enabled on the repo, checkpoints ride on commits.
+| Track | Built | Visible in the demo today | Gap | Recommended move (effort) |
+|-------|-------|---------------------------|-----|---------------------------|
+| **Gemini** | Planner (structured output), every agent loop with function calling, vision for receipts and recap photos, structured nudge-reply classification, inbox digest, embeddings for the helpdesk | Everything the bot does | None; the key-rotation story ("free tier, five keys") is a nice honesty beat | Nothing. Mention 3.6-flash + vision explicitly in the voiceover. |
+| **Vultr** | Object Storage for receipts, recap photos and Instagram staging (verified live: public URLs); Docker Compose + Caddy for a VM, never deployed | Photo URLs on the Instagram card and receipt links on the sheet are `vultrobjects.com` | The bot and dashboard run on a laptop | **Deploy to a Vultr VM** per HANDOFF §5b (2–3 h including DNS wait). It is the same move that unlocks GoDaddy and Auth0, so it is the one large change worth making today. |
+| **GoDaddy** | `DOMAIN` in Caddy config, dashboard links on cards switch on under https | Nothing | No domain, no deploy | Buy or point the domain at the VM; `A` record first so Caddy gets a cert. Rides on the Vultr deploy. |
+| **Auth0** | Dashboard login + roles wired (`apps/web/lib/auth0.ts`), runs in dev mode locally | Nothing (dev mode) | Not configured; needs an Auth0 app with the domain's callback | Configure once the domain exists (30 min). Token Vault / CIBA are stretch and should stay there. |
+| **TigerData** | Hypertable `events`, continuous aggregate `agent_activity_hourly` with a refresh policy, pgvector + pg_textsearch indexes, FK-safe `db:push` | "on a TigerData Postgres" in the voiceover; nothing on screen reads the aggregate | The aggregate is never queried; the helpdesk's keyword leg is ILIKE, not BM25 | **Activity sparkline** from `agent_activity_hourly` on `/tether status` or the dashboard (1 h, chart builder exists) and swap the ILIKE CTE for `<@>` BM25 (30 min). Both small, both make the track real on screen. |
+| **Entire** | Enabled on the repo; every commit carries its agent session checkpoint | Nothing on screen | No visible artefact | One sentence in the close, and `entire` checkpoint output in a title card or the README. Entire Brain/Graph sharing is 30 min of setup per machine and optional. |
+
+**Large changes: should any be made now?** One: the Vultr VM deploy, because three tracks depend on it and the runbook already exists. Everything else is an hour or less. No framework change (see §10).
+
+## 9. GitHub issues from Zack: triage
+
+| # | Claim | Valid? | What to do |
+|---|-------|--------|------------|
+| 16 | `/digest` is an unreadable name | Yes | Done: `/inbox summary` is registered with the same options; `/digest` stays as an alias. |
+| 17 | `/tether status` says "running" when it is waiting | Yes | Done for `/tether status` (newest ten, plain words). The status card already said "Waiting for approval" with Jump links. "Scheduled" is not a state Tether has. |
+| 18 | Getting-started says cards have approve/edit/reject but the buttons are run/edit/cancel | Not as stated: the plan card has Run / Edit steps / Cancel and the approval card has Approve / Edit / Reject, and the "Plans and approvals" topic says exactly that. The real complaint is that the two cards look alike. | Leave the labels. Make the plan card's subtitle say "press Run to start" and keep the approval card's "wants to run `tool`" line. Small, not done yet. |
+| 19 | Is there a helpdesk agent at all? | Half valid: it exists (hybrid search over the FAQ docs plus escalation to `#ops`), but the only ways in are `/agent name:helpdesk`, a plan that routes a question to it, or binding a `#help` channel with `/tether bind` | Done: the agents topic of `/help` now says how to reach it. For the demo, bind `#help` so participants can ask "what time is the deadline?" |
+
+## 10. Agentic engineering: LangGraph, Hermes, rebuilding on Entire
+
+Do not. The engine is a small custom loop (`runtime/loop.ts`) wrapped in Inngest durable steps, with one policy gateway in front of every side effect and resumable approvals via `waitForEvent`. That is the thing the pitch is about, and it is already durable, parallel and inspectable (the Inngest trace of every run exists). Moving to LangGraph would mean rebuilding the approval resume, the status cards and the step memoization against a different runtime a few hours before judging, and the demo would show the same cards. Hermes has no role here that Gemini function calling does not already fill. Entire's value is the audit trail of how the code was written; leave it as the closing line. What the live run showed matters more than the framework: the failures were planner and prompt discipline, now fixed, and every one of them would have happened identically inside a graph.
+
+## 11. Hanging and discussed-but-not-built (for the later discussion)
+
+From HANDOFF §4 and tonight, still open: the Undo button (three tools implement `undo`, nothing calls it), the "always allow this" trust ramp on approval cards, the activity sparkline from the continuous aggregate, true BM25 in the helpdesk, sheet write-through for sponsors and tasks, a participant-facing `#help` binding, webhook personas per team channel, realtime dashboard, CI. The photo-upload UX for `/post` (attach a photo, or drop it in the channel just before, or reply to the agent with it) was added tonight after the live run.

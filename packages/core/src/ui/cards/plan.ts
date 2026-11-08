@@ -26,7 +26,8 @@ export function planCard(input: {
   const open = !decision;
   const index = new Map(plan.steps.map((s, i) => [s.id, i + 1]));
   const who = input.requester?.discordId ? `<@${input.requester.discordId}>` : input.requester?.name;
-  const subtitle = [who ? `requested by ${who}` : "", input.createdAt ? ts(input.createdAt) : "", `${plan.steps.filter((s) => s.enabled).length}/${plan.steps.length} steps on`].filter(Boolean).join(" · ");
+  // "press Run to start" so a plan card is not mistaken for an approval card (issue #18): a plan is a proposal, Run approves it.
+  const subtitle = [who ? `requested by ${who}` : "", input.createdAt ? ts(input.createdAt) : "", `${plan.steps.filter((s) => s.enabled).length}/${plan.steps.length} steps on`, ...(input.decision ? [] : ["press Run to start"])].filter(Boolean).join(" · ");
 
   const stepLine = (s: Plan["steps"][number], i: number) => {
     const a = agentMeta(s.agent);
