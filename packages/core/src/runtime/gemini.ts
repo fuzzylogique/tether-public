@@ -5,35 +5,91 @@ import type { z } from "zod";
 import { env } from "../env.js";
 import type { Tool } from "../tools/types.js";
 
-let _ai: GoogleGenAI | undefined;
-export function ai() {
-  if (!_ai) _ai = new GoogleGenAI({ apiKey: env().GEMINI_API_KEY });
-  return _ai;
+/** Every configured key, primary first, de-duplicated. */
+export function geminiKeys(): string[] {
+  const e = env();
+  return [...new Set([e.GEMINI_API_KEY, ...e.GEMINI_API_KEYS.split(",").map((k) => k.trim())].filter(Boolean))];
 }
 
-/** Gemini accepts an OpenAPI-style subset. Strip what it rejects. */
-/** Retries 429/503 with exponential backoff; honors "retry in Ns" hints. Free-tier Flash is ~20 RPM. */
-export async function generateWithRetry(params: Parameters<GoogleGenAI["models"]["generateContent"]>[0], attempts = 5) {
-  // eslint-disable-next-line no-param-reassign
+const clients = new Map<string, GoogleGenAI>();
+export function ai(apiKey = geminiKeys()[0] ?? "") {
+  let c = clients.get(apiKey);
+  if (!c) { c = new GoogleGenAI({ apiKey }); clients.set(apiKey, c); }
+  return c;
+}
+
+// A (model, key) pair that hit its daily quota is skipped for an hour, then tried once more (the quota
+// resets at midnight Pacific; one wasted request per hour is cheaper than guessing the reset time).
+const exhaustedAt = new Map<string, number>();
+const EXHAUSTED_TTL_MS = 60 * 60 * 1000;
+const tail = (k: string) => `…${k.slice(-4)}`;
+
+function usableKey(model: string): string | undefined {
+  const now = Date.now();
+  return geminiKeys().find((k) => {
+    const at = exhaustedAt.get(`${model}::${k}`);
+    return !at || now - at > EXHAUSTED_TTL_MS;
+  });
+}
+
+/** Which model and key a call would use right now; `pnpm env:check` and the status card read this. */
+export function geminiRoute(model: string): { model: string; key?: string; fallback: boolean } {
+  const key = usableKey(model);
+  if (key) return { model, key, fallback: false };
+  const fb = env().GEMINI_MODEL_FALLBACK;
+  const fbKey = fb && fb !== model ? usableKey(fb) : undefined;
+  return fbKey ? { model: fb, key: fbKey, fallback: true } : { model, key: undefined, fallback: false };
+}
+
+/**
+ * Retries 429/503 with exponential backoff and honors "retry in Ns" hints (free-tier Flash is ~20 RPM).
+ * A daily-quota 429 rotates to the next configured key for the same model; when every key is exhausted
+ * for that model it drops to GEMINI_MODEL_FALLBACK (rotating again), and only then gives up.
+ */
+export type RetryWait = { model: string; attempt: number; attempts: number; waitMs: number; reason: string };
+
+export async function generateWithRetry(
+  params: Parameters<GoogleGenAI["models"]["generateContent"]>[0], attempts = 5,
+  opts: { onWait?: (w: RetryWait) => void | Promise<void> } = {},
+) {
   let delay = 2000;
+  const route = geminiRoute(params.model);
+  let model = route.model;
+  let key = route.key ?? geminiKeys()[0] ?? "";
+  if (route.fallback) console.warn(`[gemini] every key is out of daily quota for ${params.model}; using ${model}`);
   for (let i = 1; ; i++) {
     try {
-      return await ai().models.generateContent(params);
+      return await ai(key).models.generateContent({ ...params, model });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const dailyQuota = /per day/i.test(msg);
-      const fallback = env().GEMINI_MODEL_FALLBACK;
-      if (dailyQuota && fallback && params.model !== fallback) {
-        console.warn(`[gemini] daily quota exhausted for ${params.model}; falling back to ${fallback}`);
-        params = { ...params, model: fallback };
-        continue;
+      if (dailyQuota) {
+        exhaustedAt.set(`${model}::${key}`, Date.now());
+        const nextKey = usableKey(model);
+        if (nextKey) {
+          console.warn(`[gemini] daily quota exhausted for ${model} on key ${tail(key)}; switching to key ${tail(nextKey)}`);
+          key = nextKey;
+          continue;
+        }
+        const fallback = env().GEMINI_MODEL_FALLBACK;
+        const fbKey = fallback && fallback !== model ? usableKey(fallback) : undefined;
+        if (fbKey) {
+          console.warn(`[gemini] daily quota exhausted for ${model} on every key; falling back to ${fallback}`);
+          model = fallback;
+          key = fbKey;
+          continue;
+        }
+        // Daily quota won't recover for hours; an Inngest retry would only burn more requests.
+        throw new NonRetriableError(msg, { cause: e });
       }
-      // Daily quota won't recover for hours; an Inngest retry would only burn more requests.
-      if (dailyQuota) throw new NonRetriableError(msg, { cause: e });
-      const retryable = !dailyQuota && /"code":(429|503)|RESOURCE_EXHAUSTED|UNAVAILABLE|high demand/.test(msg);
+      const retryable = /"code":(429|503)|RESOURCE_EXHAUSTED|UNAVAILABLE|high demand/.test(msg);
       if (!retryable || i >= attempts) throw e;
       const hinted = msg.match(/retry in (\d+(?:\.\d+)?)s/i);
       const wait = hinted ? Math.min(Number(hinted[1]) * 1000 + 500, 60_000) : delay;
+      const reason = /RESOURCE_EXHAUSTED|429/.test(msg) ? "rate limited" : "model unavailable";
+      // Silent sleeps here looked like a hung run on the status card; say so in the log and to the caller.
+      console.warn(`[gemini] ${reason} on ${model} (key ${tail(key)}); retry ${i}/${attempts} in ${Math.round(wait / 1000)}s`);
+      await opts.onWait?.({ model, attempt: i, attempts, waitMs: wait, reason })?.catch?.(() => undefined);
       await new Promise((r) => setTimeout(r, wait));
       delay = Math.min(delay * 2, 30_000);
     }
@@ -90,7 +146,7 @@ export async function generateText(opts: { model?: string; system?: string; prom
 }
 
 export async function embed(text: string): Promise<number[]> {
-  const res = await ai().models.embedContent({
+  const res = await ai(usableKey(env().GEMINI_MODEL_EMBED) ?? geminiKeys()[0]).models.embedContent({
     model: env().GEMINI_MODEL_EMBED,
     contents: text,
     config: { outputDimensionality: 768 },

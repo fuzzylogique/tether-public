@@ -258,6 +258,20 @@ async function onCommand(i: ChatInputCommandInteraction) {
   }
 }
 
+/** `/tether setup sheet_id:` accepts the id or the full docs.google.com URL. */
+function sheetIdFrom(v: string | null): string | undefined {
+  if (!v) return undefined;
+  return v.match(/\/spreadsheets\/d\/([\w-]+)/)?.[1] ?? v.trim();
+}
+
+/** `/tether setup calendar_id:` accepts the id or an embed/share URL (`?src=<id>`); a URL stored as the id breaks every calendar call. */
+function calendarIdFrom(v: string | null): string | undefined {
+  if (!v) return undefined;
+  const s = v.trim();
+  if (!/^https?:\/\//.test(s)) return s;
+  try { return new URL(s).searchParams.get("src") ?? undefined; } catch { return undefined; }
+}
+
 async function onTether(i: ChatInputCommandInteraction, org: Org | undefined) {
   const sub = i.options.getSubcommand();
   if (sub === "setup") {
@@ -266,7 +280,7 @@ async function onTether(i: ChatInputCommandInteraction, org: Org | undefined) {
     for (const k of ["ops", "announcements", "sponsorship", "photos"]) { const ch = i.options.getChannel(k); if (ch) channels[k] = ch.id; }
     const values = {
       guildId: i.guildId!, name: i.options.getString("name") ?? org?.name ?? i.guild?.name ?? "Event",
-      sheetId: i.options.getString("sheet_id") ?? org?.sheetId, calendarId: i.options.getString("calendar_id") ?? org?.calendarId, channels,
+      sheetId: sheetIdFrom(i.options.getString("sheet_id")) ?? org?.sheetId, calendarId: calendarIdFrom(i.options.getString("calendar_id")) ?? org?.calendarId, channels,
     };
     await db().insert(schema.orgs).values(values).onConflictDoUpdate({ target: schema.orgs.guildId, set: values });
     await db().insert(schema.brandKits).values({ orgId: (await loadOrgByGuild(i.guildId!))!.id }).onConflictDoNothing();
@@ -303,8 +317,13 @@ async function onTether(i: ChatInputCommandInteraction, org: Org | undefined) {
     return i.reply({ ephemeral: true, content: rows.length ? rows.map((p) => `• \`${p.tool}\` → **${p.decision}** ${Object.keys(p.condition).length ? `when ${JSON.stringify(p.condition)}` : ""}`).join("\n") : "No org policies; defaults apply (reads run, low-risk writes run, everything else asks)." });
   }
   if (sub === "status") {
-    const rows = await db().select().from(schema.runs).where(eq(schema.runs.orgId, org.id)).orderBy(schema.runs.createdAt).limit(10);
-    return i.reply({ ephemeral: true, content: rows.length ? rows.reverse().map((r) => `• ${r.status} · ${r.request.slice(0, 60)} · <t:${Math.floor(r.createdAt.getTime() / 1000)}:R>`).join("\n") : "No runs yet." });
+    const rows = await db().select().from(schema.runs).where(eq(schema.runs.orgId, org.id)).orderBy(desc(schema.runs.createdAt)).limit(10);
+    // Plain words for what the run is doing now, not the enum (issue #17): "running" read as "busy" even while a card waited on a human.
+    const word: Record<string, string> = {
+      proposed: "⏸ waiting for you to press Run", approved: "▶ starting", running: "⚙️ working", awaiting_approval: "✋ waiting for an approval",
+      done: "✅ done", failed: "❌ failed", cancelled: "⏹ stopped", expired: "⌛ expired",
+    };
+    return i.reply({ ephemeral: true, content: rows.length ? rows.map((r) => `• ${word[r.status] ?? r.status} · ${r.request.replace(/\s+/g, " ").slice(0, 60)} · <t:${Math.floor(r.createdAt.getTime() / 1000)}:R>`).join("\n") : "No runs yet." });
   }
 }
 
@@ -670,6 +689,56 @@ async function orgForDm(discordId: string) {
   return ids.length === 1 ? ids[0] : undefined;
 }
 
+const ACK_PHRASE = "(?:ok(?:ay)?|yes|yeah|yep|yup|sure|approved?|i approve|approve it|approve|go ahead|do it|post it|send it|ship it|lgtm|looks good|thanks?|thank you|please|fine|confirmed?|i confirm)";
+const ACK_WORDS = new RegExp(`^(?:${ACK_PHRASE}[\\s,.!]*)+$`, "i");
+const STARTS_WITH_ACK = new RegExp(`^${ACK_PHRASE}\\b`, "i");
+
+/**
+ * "yes, i approve" typed at the bot is an answer, not a new request; planning it makes the orchestrator
+ * invent work ("execute the pending tasks"). If cards are waiting, point at them. If none are, the agent
+ * most likely asked for permission in prose instead of calling its tool (the card only exists once the
+ * tool is called): resume that agent with the organizer's answer and tell it to call the tool now.
+ */
+async function answerBareAck(m: Message, org: { id: string; guildId: string }, trigger: "mention" | "dm", repliedToBot = false): Promise<boolean> {
+  const text = m.content.replace(/<@!?\d+>/g, "").trim();
+  const bare = ACK_WORDS.test(text);
+  // "post it, what's going on" or a Discord reply to the agent's message: an answer to the agent, not a new request.
+  const answerLike = bare || (text.length <= 160 && (STARTS_WITH_ACK.test(text) || repliedToBot));
+  if (!answerLike) return false;
+  const open = await db().select({ summary: schema.actions.summary, ref: schema.actions.messageRef }).from(schema.actions)
+    .where(and(eq(schema.actions.orgId, org.id), eq(schema.actions.status, "pending"))).orderBy(desc(schema.actions.createdAt)).limit(5);
+  const links = open.filter((a) => a.ref).map((a) => `• ${a.summary.slice(0, 80)} → https://discord.com/channels/${org.guildId}/${a.ref!.channelId}/${a.ref!.messageId}`);
+  if (links.length) {
+    await m.reply({ content: `Approvals happen on the card: press **Approve** (or Edit / Reject) there. Waiting on you now:\n${links.join("\n")}`, allowedMentions: { parse: [] } }).catch(() => undefined);
+    return true;
+  }
+  // The last single-agent run in this channel that ended by asking a question: continue it.
+  const recent = await db().select().from(schema.runs)
+    .where(and(eq(schema.runs.orgId, org.id), eq(schema.runs.status, "done"), gt(schema.runs.createdAt, new Date(Date.now() - 30 * 60_000))))
+    .orderBy(desc(schema.runs.createdAt)).limit(8);
+  const here = m.channel.isThread() ? m.channel.id : m.channelId;
+  const run = recent.find((r) => (r.source.threadId ?? r.source.channelId) === here && (r.plan?.steps.filter((s) => s.enabled).length ?? 0) === 1);
+  const agent = run?.plan?.steps.find((s) => s.enabled)?.agent;
+  const [stepRow] = run ? await db().select({ output: schema.steps.output }).from(schema.steps).where(eq(schema.steps.runId, run.id)).limit(1) : [];
+  const asked = stepRow?.output && /approv|confirm|let me know|would you like|shall i|should i/i.test(stepRow.output);
+  if (!run || !agent || !asked) {
+    if (!bare) return false; // a real request that merely starts with "ok": let the planner have it
+    await m.reply({ content: "Nothing is waiting for approval right now. Tell me what to do and I'll plan it.", allowedMentions: { parse: [] } }).catch(() => undefined);
+    return true;
+  }
+  await m.react("⏳").catch(() => undefined);
+  await inngest.send({
+    name: "tether/request.received",
+    data: {
+      orgId: org.id, trigger, mode: "agent", agent,
+      text: `${run.request}\n\n(Earlier you replied: "${stepRow!.output!.replace(/\s+/g, " ").slice(0, 700)}". The organizer answered: "${text}". Do not ask again: call the tools to do it now. Approval happens on the card the tool call creates.)`,
+      source: { channelId: m.channelId, messageId: m.id, threadId: m.channel.isThread() ? m.channel.id : undefined },
+      actorDiscordId: m.author.id, actorName: m.author.displayName,
+    },
+  });
+  return true;
+}
+
 async function onDirectMessage(m: Message) {
   const text = m.content.trim();
   if (!text) return;
@@ -683,6 +752,8 @@ async function onDirectMessage(m: Message) {
   }
   const orgId = await orgForDm(m.author.id);
   if (!orgId) { await m.reply("I only answer DMs from people I know from a server. Ask me in your event's Discord instead."); return; }
+  const [dmOrg] = await db().select({ guildId: schema.orgs.guildId }).from(schema.orgs).where(eq(schema.orgs.id, orgId));
+  if (dmOrg && await answerBareAck(m, { id: orgId, guildId: dmOrg.guildId }, "dm")) return;
   await m.react("⏳").catch(() => undefined);
   await inngest.send({ name: "tether/request.received", data: { orgId, trigger: "dm", mode: "auto", text, source: { channelId: m.channelId, messageId: m.id }, actorDiscordId: m.author.id, actorName: m.author.displayName, attachments } });
 }
@@ -728,6 +799,7 @@ export async function onMessage(m: Message) {
   }
   // Tier 2: mention → orchestrator
   if (mentioned && text) {
+    if (await answerBareAck(m, org, "mention", repliedToBot)) return;
     await m.react("⏳").catch(() => undefined);
     await inngest.send({ name: "tether/request.received", data: { orgId: org.id, trigger: "mention", mode: "auto", text, source: { channelId: m.channelId, messageId: m.id }, actorDiscordId: m.author.id, actorName: m.author.displayName, attachments } });
   }

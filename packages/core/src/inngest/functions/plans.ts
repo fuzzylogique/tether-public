@@ -3,6 +3,7 @@ import { inngest } from "../client.js";
 import { db } from "../../db/client.js";
 import { runs, steps, events } from "../../db/schema.js";
 import { levels } from "../../runtime/planner.js";
+import { agents } from "../../agents/registry.js";
 import type { Notifier } from "../../tools/types.js";
 import { runAgentStepFn } from "./steps.js";
 import type { StepState } from "../../ui/cards/status.js";
@@ -115,7 +116,11 @@ function build(notifier: Notifier) {
       const needsPlan = Object.values(outputs).map((o) => o.match(/NEEDS_PLAN:\s*(.+)$/m)?.[1]).find(Boolean);
       // One hop only: a follow-up that again comes back as a single step must not re-escalate forever.
       const isFollowUp = run.request.includes("(Follow-up from ");
-      if (needsPlan && plan.steps.length === 1 && run.trigger !== "cron" && !isFollowUp) {
+      // The line must name another team's agent: "NEEDS_PLAN: wait for photos" or "monitor for updates"
+      // is the model being chatty, and a plan built from it only repeats the step that just finished.
+      const self = plan.steps[0]!.agent;
+      const namesOtherAgent = !!needsPlan && Object.keys(agents()).some((a) => a !== self && new RegExp(`\\b${a}\\b`, "i").test(needsPlan));
+      if (needsPlan && namesOtherAgent && plan.steps.length === 1 && run.trigger !== "cron" && !isFollowUp) {
         await step.sendEvent("escalate-to-plan", {
           name: "tether/request.received",
           data: { orgId: run.orgId, trigger: "mention", mode: "auto", text: `${run.request}\n\n(Follow-up from ${plan.steps[0]!.agent}: ${needsPlan})`, source: run.source, actorDiscordId: run.actorDiscordId ?? undefined, attachments: event.data.attachments },
