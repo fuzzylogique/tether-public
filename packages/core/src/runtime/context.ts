@@ -19,10 +19,10 @@ export async function loadActor(orgId: string, discordId?: string, fallbackName?
 
 export async function buildToolCtx(input: {
   orgId: string; actor: Actor; runId: string; stepId?: string; agent: string; notify: Notifier;
-  attachments?: ToolCtx["attachments"];
+  attachments?: ToolCtx["attachments"]; renderChannelId?: string;
 }): Promise<ToolCtx> {
   const [org] = await db().select().from(orgs).where(eq(orgs.id, input.orgId));
   if (!org) throw new Error(`org ${input.orgId} not found`);
   const refreshStatus = () => refreshRunCard(input.runId, input.notify).catch((e) => console.warn("status re-render failed", e));
-  return { db: db(), org: maskOrg(org), actor: input.actor, runId: input.runId, stepId: input.stepId, agent: input.agent, notify: input.notify, attachments: input.attachments, refreshStatus };
+  return { db: db(), org: maskOrg(org), actor: input.actor, runId: input.runId, stepId: input.stepId, agent: input.agent, notify: input.notify, attachments: input.attachments, refreshStatus, renderChannelId: input.renderChannelId };
 }

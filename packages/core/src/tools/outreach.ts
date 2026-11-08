@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { and, eq, ilike } from "drizzle-orm";
 import { defineTool } from "./types.js";
-import { processedMail, sponsors, sponsorThreads } from "../db/schema.js";
+import { income, processedMail, sponsors, sponsorThreads } from "../db/schema.js";
 import { createDraft, searchMail, sendEmail } from "../google/gmail.js";
 import { inngest } from "../inngest/client.js";
 import { buildInboxDigest } from "../runtime/digest.js";
@@ -46,12 +46,14 @@ export const updateSponsor = defineTool({
     // the onboarding workflow fires exactly once per transition into "confirmed".
     let workflow: string | undefined;
     if (args.stage === "confirmed" && s.stage !== "confirmed") {
+      // A plan may already have had finance log this sponsor's money; the workflow then skips its income step.
+      const [logged] = await ctx.db.select({ id: income.id }).from(income).where(and(eq(income.orgId, ctx.org.id), eq(income.sponsorId, s.id)));
       await inngest.send({
         id: `wf-sponsor-confirmed-${s.id}-${Date.now()}`,
         name: "tether/workflow.triggered",
         data: {
           orgId: ctx.org.id, name: "sponsor-confirmed", actorDiscordId: ctx.actor.discordId, actorName: ctx.actor.name,
-          params: { sponsor: updated!.name, amount: updated!.amount ? Number(updated!.amount) : undefined, tier: updated!.tier ?? undefined, contactName: updated!.contactName ?? undefined, deliverables: updated!.deliverables.map((d) => d.title) },
+          params: { sponsor: updated!.name, amount: updated!.amount ? Number(updated!.amount) : undefined, tier: updated!.tier ?? undefined, contactName: updated!.contactName ?? undefined, deliverables: updated!.deliverables.map((d) => d.title), incomeAlreadyLogged: !!logged },
         },
       });
       workflow = "sponsor-confirmed";
@@ -75,14 +77,21 @@ export const inboxDigest = defineTool({
 export const createEmailDraft = defineTool({
   name: "create_email_draft",
   description: "Create a Gmail draft (not sent). Use when the organizer wants to review in Gmail.",
-  input: z.object({ to: z.string().email(), subject: z.string(), body: z.string(), cc: z.string().optional() }),
-  effect: "write", risk: "low",
+  input: z.object({ to: z.string().email(), subject: z.string(), body: z.string(), cc: z.string().optional(), sponsorName: z.string().optional().describe("The sponsor this draft is for; the address is checked against their contact on file") }),
+  effect: "write", risk: "medium",
   editFields: [
     { key: "to", label: "To", style: "short", required: true }, { key: "cc", label: "Cc", style: "short" },
     { key: "subject", label: "Subject", style: "short", required: true }, { key: "body", label: "Body", style: "paragraph", required: true },
   ],
   summarize: (a) => `Draft email to ${a.to}: ${a.subject}`,
-  async execute(args) { return createDraft(args); },
+  async execute(args, ctx) {
+    // Guard against invented addresses: when the draft names a sponsor, the address must be that sponsor's contact.
+    if (args.sponsorName) {
+      const [s] = await ctx.db.select({ email: sponsors.contactEmail }).from(sponsors).where(and(eq(sponsors.orgId, ctx.org.id), ilike(sponsors.name, args.sponsorName)));
+      if (s?.email && s.email.toLowerCase() !== args.to.toLowerCase()) return { error: `${args.sponsorName}'s contact on file is ${s.email}, not ${args.to}; use the address from list_sponsors` };
+    }
+    return createDraft(args);
+  },
 });
 
 export const sendSponsorEmail = defineTool({
@@ -100,6 +109,10 @@ export const sendSponsorEmail = defineTool({
   ],
   summarize: (a) => `Send email to ${a.to}: "${a.subject}"`,
   async execute(args, ctx) {
+    if (args.sponsorName) {
+      const [onFile] = await ctx.db.select({ email: sponsors.contactEmail }).from(sponsors).where(and(eq(sponsors.orgId, ctx.org.id), ilike(sponsors.name, args.sponsorName)));
+      if (onFile?.email && onFile.email.toLowerCase() !== args.to.toLowerCase()) return { error: `${args.sponsorName}'s contact on file is ${onFile.email}, not ${args.to}; use the address from list_sponsors` };
+    }
     const sent = await sendEmail(args);
     if (args.sponsorName) {
       const [s] = await ctx.db.select().from(sponsors).where(and(eq(sponsors.orgId, ctx.org.id), ilike(sponsors.name, args.sponsorName)));

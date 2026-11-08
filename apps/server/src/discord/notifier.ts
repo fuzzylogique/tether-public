@@ -162,6 +162,13 @@ export class DiscordNotifier implements Notifier {
     await m.edit(body.card ? await renderEdit(body.card) : { content: (body.text ?? "").slice(0, 1990) });
   }
 
+  async typing({ channelId }: Parameters<Notifier["typing"]>[0]) {
+    try {
+      const ch = await this.client.channels.fetch(channelId);
+      if (ch && "sendTyping" in ch && typeof ch.sendTyping === "function") await ch.sendTyping();
+    } catch { /* an indicator is never worth failing a step over */ }
+  }
+
   async dm({ discordId, ...body }: Parameters<Notifier["dm"]>[0]) {
     const user = await this.client.users.fetch(discordId);
     await user.send(await payload(body as MessageBody) as never);

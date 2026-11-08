@@ -8,7 +8,8 @@ handlers, `help_opened` events, three fixtures with payload snapshots, `help.tes
 (`welcomeCard` on `guildCreate`, `help:open`, pointers on the setup and channels replies). L1 built
 the same day (`StepState.recent` + `toolLog`, `tool_call` events carry `stepId` and `summary`,
 `refreshRunCard` reads them, `ctx.refreshStatus` after every tool call, 1.5 s edit throttle in
-`DiscordNotifier`, `events_run_time_idx`). L2 and L3 open.** Preview the cards with
+`DiscordNotifier`, `events_run_time_idx`). L2 built 2026-11-08 (`Notifier.typing`,
+`ToolCtx.renderChannelId` from the run's thread or channel, typing before each model turn). L3 open.** Preview the cards with
 `pnpm discord:preview -- help welcome status-working`.
 
 Decisions taken: `/help` is one ephemeral card with a topic select, generated from the command

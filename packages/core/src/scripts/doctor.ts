@@ -29,9 +29,29 @@ const checks: Check[] = [
     async run() {
       if (!e.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY empty");
       const { GoogleGenAI } = await import("@google/genai");
-      const ai = new GoogleGenAI({ apiKey: e.GEMINI_API_KEY });
-      const r = await ai.models.generateContent({ model: e.GEMINI_MODEL_AGENT ?? "gemini-3.6-flash", contents: "Reply with the single word: ready" });
-      return `${e.GEMINI_MODEL_AGENT} says "${(r.text ?? "").trim().slice(0, 30)}"`;
+      const { geminiKeys } = await import("../runtime/gemini.js");
+      // One request per key and model so the line says how much daily quota the demo actually has left.
+      const models = [e.GEMINI_MODEL_AGENT, e.GEMINI_MODEL_FALLBACK].filter((m, i, a): m is string => !!m && a.indexOf(m) === i);
+      const lines: string[] = [];
+      let anyOk = false;
+      for (const key of geminiKeys()) {
+        const ai = new GoogleGenAI({ apiKey: key });
+        const parts: string[] = [];
+        for (const model of models) {
+          try {
+            await ai.models.generateContent({ model, contents: "Reply with the single word: ready" });
+            parts.push(`${model} ✔`); anyOk = true;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            parts.push(`${model} ${/per day/i.test(msg) ? "✘ daily quota exhausted" : /429|RESOURCE_EXHAUSTED/.test(msg) ? "~ rate limited (fine)" : `✘ ${msg.slice(0, 60)}`}`);
+            if (/429|RESOURCE_EXHAUSTED/.test(msg) && !/per day/i.test(msg)) anyOk = true;
+          }
+        }
+        lines.push(`key …${key.slice(-4)}: ${parts.join(" · ")}`);
+      }
+      const summary = `${geminiKeys().length} key${geminiKeys().length === 1 ? "" : "s"} (free tier is 20 requests/day per key per model; add teammates' keys to GEMINI_API_KEYS)\n   ${lines.join("\n   ")}`;
+      if (!anyOk) throw new Error(summary);
+      return summary;
     },
   },
   {

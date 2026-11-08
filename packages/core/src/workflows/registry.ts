@@ -41,17 +41,21 @@ export const sponsorConfirmed = define({
     tier: z.string().optional(),
     contactName: z.string().optional(),
     deliverables: z.array(z.string()).default([]),
+    /** True when a finance step in the triggering plan already recorded this sponsor's income. */
+    incomeAlreadyLogged: z.boolean().default(false),
   }),
-  describe: (p) => `${p.sponsor} confirmed${p.amount ? ` ${money(p.amount)}` : ""}${p.tier ? ` (${p.tier})` : ""}`,
+  describe: (p) => `${p.sponsor} confirmed${p.amount ? ` ${money(p.amount)}` : ""}${p.tier ? ` (${p.tier})` : ""}${p.incomeAlreadyLogged ? " · income already on the sheet" : ""}`,
   build: (p) => {
     const amount = p.amount ? money(p.amount) : "the agreed amount";
     const deliverables = p.deliverables.length ? p.deliverables.join("; ") : "the usual tier deliverables: logo on the website, a social mention, and a booth table";
     return {
       summary: `Onboard ${p.sponsor} as a confirmed sponsor`,
       steps: [
-        step("s1", "finance", `${p.sponsor} confirmed a sponsorship of ${amount}${p.tier ? ` at the ${p.tier} tier` : ""}. Record it as pledged income with log_income (source "${p.sponsor} sponsorship", sponsorName "${p.sponsor}"${p.amount ? `, amount ${p.amount}` : ""}); a human approves the sheet entry. Then report the updated income and net position in one line.`, [], true),
-        step("s2", "coordination", `${p.sponsor} is now a confirmed sponsor. Create one task per deliverable we owe them (${deliverables}), owned by the lead, due two days before the event. Keep titles short, e.g. "${p.sponsor}: logo on website".`),
-        step("s3", "socials", `Draft a short, warm Discord announcement welcoming ${p.sponsor} as a${p.tier ? ` ${p.tier}` : ""} sponsor${p.contactName ? ` (contact ${p.contactName})` : ""}. Post it to the announcements channel (it will be approved by a human first). Skip the image if generation is unavailable.`, ["s1"], true),
+        ...(p.incomeAlreadyLogged ? [] : [
+          step("s1", "finance", `${p.sponsor} confirmed a sponsorship of ${amount}${p.tier ? ` at the ${p.tier} tier` : ""}. Record it as pledged income with log_income (source "${p.sponsor} sponsorship", sponsorName "${p.sponsor}"${p.amount ? `, amount ${p.amount}` : ""}); a human approves the sheet entry. If the result says it was rejected or denied, say so plainly and stop. Then report the updated income and net position in one line.`, [], true),
+        ]),
+        step("s2", "coordination", `${p.sponsor} is now a confirmed sponsor. Create one task per deliverable we owe them (${deliverables}), owned by the lead, due two days before the event. Keep titles short, e.g. "${p.sponsor}: logo on website". Create nothing else.`),
+        step("s3", "socials", `Draft a short, warm Discord announcement welcoming ${p.sponsor} as a${p.tier ? ` ${p.tier}` : ""} sponsor${p.contactName ? ` (contact ${p.contactName})` : ""}. Post it to the announcements channel (it will be approved by a human first). Skip the image if generation is unavailable.`, p.incomeAlreadyLogged ? [] : ["s1"], true),
       ],
     };
   },

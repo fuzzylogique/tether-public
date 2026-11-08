@@ -24,6 +24,8 @@ export type ToolCtx = {
   notify: Notifier;
   /** Redraw the run's status card from the rows (docs/GUIDE.md §5.3); the loop calls it after each tool call. */
   refreshStatus?: () => Promise<void>;
+  /** Where the run renders (thread, else channel): the loop shows a typing indicator there before each model turn. */
+  renderChannelId?: string;
   /** Attachments on the triggering message (receipts, photos). */
   attachments?: { url: string; contentType?: string; name?: string }[];
 };
@@ -66,6 +68,8 @@ export interface Notifier {
   postToChannel(input: { channelId: string } & MessageBody & Attachments): Promise<{ messageId: string }>;
   /** Re-render a message the adapter posted earlier (approval card after a decision, etc.). */
   editMessage(input: { channelId: string; messageId: string } & MessageBody): Promise<void>;
+  /** "Tether is typing…" for about ten seconds (docs/GUIDE.md §5.4). Best effort; never throws. */
+  typing(input: { channelId: string }): Promise<void>;
   dm(input: { discordId: string } & MessageBody): Promise<void>;
   /** Recent image attachments in a channel, newest first (event photos the team dropped in #photos). */
   listChannelImages(input: { channelId: string; limit?: number }): Promise<ChannelImage[]>;

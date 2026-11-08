@@ -4,6 +4,9 @@ const schema = z.object({
   NODE_ENV: z.string().default("development"),
   DATABASE_URL: z.string().default(""),
   GEMINI_API_KEY: z.string().default(""),
+  // Extra keys from other Google accounts/projects, comma-separated. Free-tier daily quotas are per project, so the
+  // runtime rotates to the next key when one is exhausted for a model before dropping to GEMINI_MODEL_FALLBACK.
+  GEMINI_API_KEYS: z.string().default(""),
   GEMINI_MODEL_PLANNER: z.string().default("gemini-3.6-flash"),
   GEMINI_MODEL_AGENT: z.string().default("gemini-3.6-flash"),
   GEMINI_MODEL_FALLBACK: z.string().default("gemini-3.1-flash-lite"),

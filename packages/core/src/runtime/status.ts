@@ -3,7 +3,7 @@
  * transition (a level finishing in run-plan, an approval posted or settled in run-agent-step, a Stop
  * from the button handler, a step dying) can redraw it and they all agree (docs/CARDS.md §8, §10).
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { actions, events, orgs, runs, steps } from "../db/schema.js";
 import type { Notifier } from "../tools/types.js";
@@ -46,10 +46,10 @@ export async function refreshRunCard(runId: string, notifier: Notifier) {
   });
 }
 
-/** The last few `tool_call` events per step (docs/GUIDE.md §5.2), oldest first, keyed by step id. */
+/** The last few `tool_call` (and `llm_wait`: a rate-limit retry) events per step (docs/GUIDE.md §5.2), oldest first, keyed by step id. */
 async function recentToolCalls(runId: string): Promise<Map<string, ToolLogLine[]>> {
   const rows = await db().select({ time: events.time, data: events.data }).from(events)
-    .where(and(eq(events.runId, runId), eq(events.kind, "tool_call"))).orderBy(events.time);
+    .where(and(eq(events.runId, runId), inArray(events.kind, ["tool_call", "llm_wait"]))).orderBy(events.time);
   const out = new Map<string, ToolLogLine[]>();
   for (const r of rows) {
     const d = r.data as { stepId?: string; tool?: string; summary?: string; error?: string };

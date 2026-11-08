@@ -80,6 +80,7 @@ Google is authorized on Fayez's account only, so Tether mirrors everything into 
 - `gemini-3.7-flash`, `gemini-3.8-flash`, `gemini-flash-latest`: **20 requests/day each** — do not use.
 - Pro models and image models: **0** on free tier.
 - We run `gemini-3.6-flash` with automatic fallback to `gemini-3.1-flash-lite` when a daily quota trips (see `GEMINI_MODEL_*` in `.env`).
+- **`gemini-3.6-flash` is also 20 requests/day per key.** One multi-step plan is 6 to 10 requests. Each teammate makes a free key in their *own* AI Studio project and the stage laptop lists them in `GEMINI_API_KEYS` (comma-separated); the runtime rotates to the next key when one is exhausted for a model, before dropping to the lite fallback. `pnpm env:check` prints the state of every key.
 - **Do not run `pnpm eval:plans` casually** — it burns 12+ requests.
 - Posters/image generation need a paid key; skip the socials image step for now or get a paid key with a spend cap.
 

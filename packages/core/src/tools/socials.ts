@@ -5,7 +5,11 @@ import { brandKits } from "../db/schema.js";
 import { generateWithRetry, generateStructured, generateStructuredMultimodal, type Part } from "../runtime/gemini.js";
 import { env } from "../env.js";
 import { putObject, uploadObject } from "../storage.js";
-import { extensionFor, fetchTrustedMedia } from "../media.js";
+import { extensionFor, fetchTrustedMedia, trustedMediaUrl } from "../media.js";
+
+// A model that lost the real URLs between steps invents plausible ones; refuse them at parse time so the
+// agent gets "invalid arguments" back instead of a human getting an approval card with a broken gallery.
+const storedImageUrl = z.string().url().refine(trustedMediaUrl, { message: "must be a URL returned by select_recap_photos or generate_hero_image (a Discord attachment or Tether's own storage); do not invent URLs" });
 import { instagramConfigured, publishToInstagram, stageFeedImages } from "../instagram.js";
 
 const postSchema = z.object({
@@ -93,7 +97,7 @@ const RECAP_MAX_INLINE_BYTES = 16 * 1024 * 1024;
 
 export const selectRecapPhotos = defineTool({
   name: "select_recap_photos",
-  description: "Look at the recent event photos with vision, pick the best few for a recap post, write a caption for each, and store durable copies. Returns the picked photo URLs to pass to post_announcement.",
+  description: "Look at the recent event photos with vision in ONE call, pick the best few for a recap post, write a caption for each, and store durable copies. Call it once with the brief and the count; omit messageIds unless the organizer named specific photos. Returns the picked photo URLs to pass to post_announcement or post_instagram.",
   input: z.object({
     brief: z.string().describe("What the recap is about and the mood wanted, e.g. 'Day 1 recap: hacking, snacks, late night energy'"),
     count: z.number().int().min(1).max(8).default(4),
@@ -105,7 +109,13 @@ export const selectRecapPhotos = defineTool({
     const channelId = ctx.org.channels["photos"];
     if (!channelId) return { error: "No photos channel configured. Run `/tether channels` (creates #photos) or `/tether setup photos:#channel`." };
     let images = await ctx.notify.listChannelImages({ channelId, limit: 50 });
-    if (args.messageIds?.length) images = images.filter((p) => args.messageIds!.includes(p.messageId));
+    let note: string | undefined;
+    if (args.messageIds?.length) {
+      // Fewer named photos than picks wanted: judge the whole channel instead of returning a thin or empty pick.
+      const named = images.filter((p) => args.messageIds!.includes(p.messageId));
+      if (named.length >= args.count) images = named;
+      else note = `messageIds matched ${named.length} photo(s), fewer than the ${args.count} wanted, so all recent photos were considered`;
+    }
     images = images.slice(0, RECAP_MAX_CANDIDATES);
     if (!images.length) return { error: "No photos found in the photos channel" };
 
@@ -150,7 +160,7 @@ export const selectRecapPhotos = defineTool({
       }
       picks.push({ url, caption: pick.caption, reason: pick.reason, credit: c.image.authorName, sourceMessageId: c.image.messageId, storage });
     }
-    return { picks, candidates: candidates.length, skipped: result.skipped };
+    return { picks, candidates: candidates.length, skipped: result.skipped, ...(note ? { note } : {}) };
   },
 });
 
@@ -159,8 +169,8 @@ export const postAnnouncement = defineTool({
   description: "Post text with up to four images to the org announcements channel. Pass the picked recap photo URLs as imageUrls.",
   input: z.object({
     text: z.string(),
-    imageUrl: z.string().url().optional().describe("Single image (hero image)"),
-    imageUrls: z.array(z.string().url()).max(4).optional().describe("Up to four images, e.g. recap photos"),
+    imageUrl: storedImageUrl.optional().describe("Single image (hero image)"),
+    imageUrls: z.array(storedImageUrl).max(4).optional().describe("Up to four images, e.g. recap photos"),
   }),
   effect: "external", risk: "medium",
   editFields: [{ key: "text", label: "Post text", style: "paragraph", required: true }],
@@ -186,7 +196,7 @@ export const postInstagram = defineTool({
   description: "Publish a feed post to the org's Instagram account: one image, or a carousel of 2-10 (e.g. the picked recap photos). Images are converted to JPEG and cropped to Instagram's frame automatically. The caption is the full post text, hashtags included.",
   input: z.object({
     caption: z.string().max(2200).describe("Full caption: copy, call to action, then hashtags (30 at most)"),
-    imageUrls: z.array(z.string().url()).min(1).max(10).describe("Recap photo URLs from select_recap_photos, or the hero image URL"),
+    imageUrls: z.array(storedImageUrl).min(1).max(10).describe("Recap photo URLs from select_recap_photos, or the hero image URL"),
   }),
   effect: "external", risk: "high",
   editFields: [{ key: "caption", label: "Caption", style: "paragraph", required: true }],
