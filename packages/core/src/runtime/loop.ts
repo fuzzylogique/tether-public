@@ -7,6 +7,7 @@ import { decide } from "../policy/engine.js";
 import { toolAllowed } from "../workspace.js";
 import { actions, events } from "../db/schema.js";
 import { postActivity } from "./feed.js";
+import { toolCallEvent } from "./toollog.js";
 
 /** Memoized step runner (Inngest `step.run` in production, identity in tests/eval). */
 export type StepRunner = <T>(id: string, fn: () => Promise<T>) => Promise<T>;
@@ -87,7 +88,7 @@ export async function runAgentLoop(input: {
         const action = await step(`${agent.name}:action:${turn}:${i}`, async () => {
           const [row] = await ctx.db.insert(actions).values({
             orgId: ctx.org.id, runId: ctx.runId, stepId: ctx.stepId, agent: agent.name, tool: tool.name, args,
-            summary: tool.summarize(args), effect: tool.effect, risk: tool.risk,
+            summary: tool.summarize(args), effect: tool.effect, risk: tool.risk, approverRole: decision.approverRole,
           }).returning();
           await ctx.db.insert(events).values({ orgId: ctx.org.id, runId: ctx.runId, kind: "policy_decision", agent: agent.name, data: { tool: tool.name, decision: "approve", actionId: row!.id } });
           return row!;
@@ -100,7 +101,9 @@ export async function runAgentLoop(input: {
       const out = await step(`${agent.name}:tool:${turn}:${i}:${tool.name}`, async () => {
         const result = await tool.execute(args, ctx).catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
         await postActivity(ctx, tool, args, result);
-        await ctx.db.insert(events).values({ orgId: ctx.org.id, runId: ctx.runId, kind: "tool_call", agent: agent.name, data: { tool: tool.name, args, error: (result as { error?: string })?.error } });
+        await ctx.db.insert(events).values({ orgId: ctx.org.id, runId: ctx.runId, kind: "tool_call", agent: agent.name, data: toolCallEvent({ tool: tool.name, args, stepId: ctx.stepId, error: (result as { error?: string })?.error }) });
+        // The status card's tool log reads that event (docs/GUIDE.md §5.3); the adapter throttles edits.
+        await ctx.refreshStatus?.();
         return result;
       });
       results.push(fnResult(tool.name, out, call.id));

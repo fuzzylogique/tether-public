@@ -1,0 +1,86 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 8947584,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Stopped · Onboard Shopify as a Gold sponsor\n-# 1/3 steps finished before the stop · 2 actions already ran"
+        },
+        {
+          "type": 10,
+          "content": "> Shopify confirmed $2k! Kick off onboarding: thank them, book the kickoff call, update the budget and tell the team."
+        },
+        {
+          "type": 10,
+          "content": "⏹ **Stopped** by Fayez · <t:1794076200:R> · tool calls already in flight finished; nothing new started."
+        },
+        {
+          "type": 14,
+          "divider": true,
+          "spacing": 1
+        },
+        {
+          "type": 10,
+          "content": "### ✅ 🤝 Sponsorship outreach\nShopify is now **confirmed** at $2,000 (Gold). Thank-you email sent to Priya."
+        },
+        {
+          "type": 14,
+          "divider": true,
+          "spacing": 1
+        },
+        {
+          "type": 10,
+          "content": "### ➖ 📅 Calendar\n_(stopped before finishing)_"
+        },
+        {
+          "type": 14,
+          "divider": true,
+          "spacing": 1
+        },
+        {
+          "type": 10,
+          "content": "### ➖ 💸 Finance\n_(stopped before finishing)_"
+        },
+        {
+          "type": 14,
+          "divider": true,
+          "spacing": 1
+        },
+        {
+          "type": 10,
+          "content": "### Approved actions that already ran\n• 🤝 Email Priya Nair (Shopify): Thank you — Gold confirmed · <t:1794075960:R>\n• 🤝 Move Shopify to confirmed ($2,000, Gold) · <t:1794075960:R>"
+        },
+        {
+          "type": 12,
+          "items": [
+            {
+              "media": {
+                "url": "attachment://summary-7f3c2a91.png"
+              },
+              "description": "Outcome: 1/3 steps done"
+            }
+          ]
+        },
+        {
+          "type": 10,
+          "content": "-# run 7f3c2a91"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "name": "summary-7f3c2a91.png",
+      "bytes": 46939,
+      "sha256": "b7d9208c73c52858b1e73805f5e31563136be898a6543dd7f230b72ca637209e"
+    }
+  ]
+}

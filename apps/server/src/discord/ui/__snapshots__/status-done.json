@@ -1,0 +1,37 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 1941109,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Done"
+        },
+        {
+          "type": 10,
+          "content": "> Shopify confirmed $2k! Kick off onboarding: thank them, book the kickoff call, update the budget and tell the team."
+        },
+        {
+          "type": 10,
+          "content": "🟩🟩🟩🟩  **4/4** steps finished"
+        },
+        {
+          "type": 10,
+          "content": "✅ 🤝 **Sponsorship outreach** — Mark Shopify confirmed at $2,000 (Gold) and email Priya a thank-you with next steps and the logo spec request. · <t:1794075960:R>\n✅ 📅 **Calendar** — Book a 30-minute sponsor kickoff call with Shopify on Monday morning and invite Priya. · <t:1794076020:R>\n✅ 💸 **Finance** — Record Shopify's $2,000 against the Prizes line and report what is left. · <t:1794076080:R>\n✅ 🧭 **Coordination** — Create a task for Sam to send Shopify our booth requirements by Wednesday. · <t:1794076140:R>"
+        },
+        {
+          "type": 10,
+          "content": "-# run 7f3c2a91"
+        }
+      ]
+    }
+  ],
+  "files": []
+}

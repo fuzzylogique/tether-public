@@ -22,7 +22,9 @@
     "env:check": "tsx src/scripts/doctor.ts",
     "sheet:create": "tsx src/scripts/sheet-create.ts",
     "test:charts": "node --import tsx --test src/ui/charts/charts.test.ts",
-    "google:share": "tsx src/scripts/google-share.ts"
+    "google:share": "tsx src/scripts/google-share.ts",
+    "instagram:check": "tsx src/scripts/instagram-check.ts",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.700.0",
@@ -31,6 +33,7 @@
     "googleapis": "^160.0.0",
     "inngest": "^3.40.0",
     "postgres": "^3.4.5",
+    "sharp": "^0.35.5",
     "zod": "^3.25.0",
     "zod-to-json-schema": "^3.24.0"
   },

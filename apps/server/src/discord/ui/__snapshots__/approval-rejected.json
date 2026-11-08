@@ -1,0 +1,49 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 14830410,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Log $84.20 to Food (Pizza Nova)\n-# 💸 Finance wants to run `log_expense` · risk medium"
+        },
+        {
+          "type": 10,
+          "content": "❌ **Rejected** by Fayez · <t:1794076200:R>"
+        },
+        {
+          "type": 9,
+          "components": [
+            {
+              "type": 10,
+              "content": "**Amount**  $84.20\n**Category**  Food\n**Vendor**  Pizza Nova\n**Date**  2026-11-07\n**Note**  Late-night slices for volunteers"
+            },
+            {
+              "type": 10,
+              "content": "**Food** $1,850 → **$1,934** of $4,000\n🟩🟩🟩🟩🟩⬜⬜⬜⬜⬜  48%"
+            }
+          ],
+          "accessory": {
+            "type": 11,
+            "media": {
+              "url": "https://picsum.photos/seed/hacktrent-receipt/400/600"
+            },
+            "description": "receipt"
+          }
+        },
+        {
+          "type": 10,
+          "content": "-# write · action a1b2c3d4"
+        }
+      ]
+    }
+  ],
+  "files": []
+}

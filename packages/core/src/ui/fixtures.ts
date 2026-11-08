@@ -6,7 +6,7 @@ import type { Plan } from "../db/schema.js";
 import type { ActionRef } from "../tools/types.js";
 import { TETHER } from "./tokens.js";
 import { kv, sep, text, type Card } from "./card.js";
-import { activityCard, approvalCard, budgetCard, calendarCard, planCard, sponsorsCard, statusCard, summaryCard, tasksCard, type StepState } from "./cards/index.js";
+import { activityCard, approvalCard, budgetCard, calendarCard, helpCard, planCard, sponsorsCard, statusCard, summaryCard, tasksCard, welcomeCard, type CommandDoc, type StepState } from "./cards/index.js";
 
 export const DEFAULT_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png";
 
@@ -58,7 +58,7 @@ const steps = (statuses: StepState["status"][]): StepState[] =>
   DEMO_PLAN.steps.filter((s) => s.enabled).map((s, i) => ({ id: s.id, agent: s.agent, instruction: s.instruction, status: statuses[i] ?? "pending", finishedAt: statuses[i] === "done" || statuses[i] === "failed" ? NOW - (4 - i) * MIN : undefined }));
 
 const action = (tool: string, agent: string, summary: string, risk: ActionRef["risk"], args: Record<string, unknown>, effect: ActionRef["effect"] = "external"): ActionRef =>
-  ({ id: `a1b2c3d4-${tool.length.toString(16).padStart(4, "0")}-4000-8000-000000000000`, tool, agent, summary, risk, effect, args });
+  ({ id: `a1b2c3d4-${tool.length.toString(16).padStart(4, "0")}-4000-8000-000000000000`, tool, agent, summary, risk, effect, args, ...(risk === "high" ? { approverRole: "lead" } : {}) });
 
 export const APPROVALS = {
   email: action("send_email", "outreach", "Send email to priya@shopify.com: \"Welcome aboard, Shopify!\"", "high", {
@@ -124,14 +124,45 @@ export const EVENTS = [
   { title: "Midnight snack", start: at(23, 30), end: at(24), location: "Atrium" },
 ];
 
+/** A slice of the real command set, enough to exercise every line shape on the Commands topic. */
+export const DEMO_COMMANDS: CommandDoc[] = [
+  { name: "budget", description: "Finances", subcommands: [
+    { name: "summary", description: "Allocated vs spent", options: [{ name: "category", description: "Category", required: false }] },
+    { name: "log", description: "Log an expense", options: [{ name: "amount", description: "Amount", required: true }, { name: "category", description: "Category", required: true }, { name: "vendor", description: "Vendor", required: false }] },
+  ] },
+  { name: "task", description: "Coordination", subcommands: [{ name: "list", description: "Tasks", options: [{ name: "overdue", description: "Only overdue", required: false }] }] },
+  { name: "plan", description: "Multi-step request: Tether proposes a plan you approve", subcommands: [{ description: "Multi-step request: Tether proposes a plan you approve", options: [{ name: "request", description: "What needs to happen", required: false }, { name: "from_chat", description: "Read the last N messages", required: false }] }] },
+  { name: "help", description: "How to use Tether", subcommands: [{ description: "How to use Tether", options: [{ name: "topic", description: "Topic", required: false }] }] },
+];
+
 export function fixtures(): Fixture[] {
   const channels = { announcements: "000000000000000010", ops: "000000000000000011" };
   return [
     { name: "primitives", card: primitivesCard() },
     { name: "plan", card: planCard({ runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, requester: { name: "Fayez" }, createdAt: NOW - 2 * MIN }) },
-    { name: "plan-approved", card: planCard({ runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, requester: { name: "Fayez" }, createdAt: NOW - 2 * MIN, decision: { approved: true, by: "Fayez", at: NOW - MIN } }) },
+    { name: "plan-approved", card: planCard({ runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, requester: { name: "Fayez" }, createdAt: NOW - 2 * MIN, decision: { status: "approved", by: "Fayez", at: NOW - MIN } }) },
     { name: "status-running", card: statusCard({ runId: RUN, request: DEMO_REQUEST, status: "running", steps: steps(["done", "running", "running", "pending"]) }) },
+    {
+      name: "status-working", card: statusCard({
+        runId: RUN, request: DEMO_REQUEST, status: "running", dashboardUrl: "https://tether.example.com/runs/1",
+        steps: steps(["done", "running", "running", "pending"]).map((s, i) => i === 1 ? { ...s, recent: [
+          { tool: "list_sponsors", summary: "Shopify", at: NOW - 40_000 },
+          { tool: "create_email_draft", summary: "Welcome aboard, Shopify!", at: NOW - 8_000 },
+        ] } : i === 2 ? { ...s, recent: [{ tool: "budget_summary", at: NOW - 15_000 }, { tool: "sync_budget_from_sheet", at: NOW - 12_000, error: "sheet 1abc not shared with the service account" }] } : s),
+      }),
+    },
     { name: "status-done", card: statusCard({ runId: RUN, request: DEMO_REQUEST, status: "done", steps: steps(["done", "done", "done", "done"]) }) },
+    {
+      name: "status-waiting", card: statusCard({
+        runId: RUN, request: DEMO_REQUEST, status: "awaiting_approval", steps: steps(["done", "awaiting_approval", "running", "pending"]), dashboardUrl: "https://tether.example.com/runs/1",
+        pending: [
+          { stepKey: DEMO_PLAN.steps[1]!.id, summary: 'Send email to priya@shopify.com: "Gold confirmed — thank you"', channelId: "1568699100117999762", url: "https://discord.com/channels/1/2/3" },
+          { stepKey: DEMO_PLAN.steps[1]!.id, summary: "Create event \"Shopify kickoff\" at 2026-11-09T09:00", channelId: "1568699100117999762", url: "https://discord.com/channels/1/2/4" },
+        ],
+      }),
+    },
+    { name: "approval-edited", card: approvalCard({ ...APPROVALS.email, approverRole: "lead" }, { context: { runUrl: "https://discord.com/channels/1/2/3" }, edited: { by: "Fayez", at: NOW - MIN, fields: ["subject", "body"] } }) },
+    { name: "status-stopped", card: statusCard({ runId: RUN, request: DEMO_REQUEST, status: "cancelled", steps: steps(["done", "cancelled", "cancelled", "skipped"]), stoppedBy: "Fayez" }) },
     { name: "approval-email", card: approvalCard(APPROVALS.email) },
     { name: "approval-announcement", card: approvalCard(APPROVALS.announcement, { context: { channels } }) },
     { name: "approval-expense", card: approvalCard(APPROVALS.expense, { context: { budget: { category: "Food", allocated: 4000, spent: 1850 } } }) },
@@ -141,6 +172,12 @@ export function fixtures(): Fixture[] {
     { name: "approval-fallback", card: approvalCard(APPROVALS.fallback) },
     { name: "approval-decided", card: approvalCard(APPROVALS.email, { decision: { status: "executed", by: "Fayez", at: NOW - 30 * 1000 } }) },
     { name: "approval-rejected", card: approvalCard(APPROVALS.expense, { context: { budget: { category: "Food", allocated: 4000, spent: 1850 } }, decision: { status: "rejected", by: "Fayez", at: NOW } }) },
+    // docs/CARDS.md §2: the transient and terminal states a card can be redrawn into from its row.
+    { name: "approval-approving", card: approvalCard({ ...APPROVALS.email, approverRole: "lead" }, { decision: { status: "approved", by: "Fayez", at: NOW } }) },
+    { name: "approval-failed", card: approvalCard(APPROVALS.email, { decision: { status: "failed", by: "Fayez", at: NOW, note: "Gmail: 403 insufficient permissions" } }) },
+    { name: "approval-orphaned", card: approvalCard(APPROVALS.nudge, { decision: { status: "expired", at: NOW - 5 * MIN, note: "the run failed before a decision" } }) },
+    { name: "approval-cancelled", card: approvalCard(APPROVALS.announcement, { context: { channels }, decision: { status: "cancelled", by: "Fayez", at: NOW - MIN } }) },
+    { name: "plan-expired", card: planCard({ runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, requester: { name: "Fayez" }, createdAt: NOW - 24 * 60 * MIN, decision: { status: "expired", at: NOW } }) },
     {
       name: "summary", card: summaryCard({
         runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, status: "done", finishedAt: NOW,
@@ -150,6 +187,22 @@ export function fixtures(): Fixture[] {
           { id: "s3", agent: "finance", status: "done", output: "Recorded $2,000 sponsorship. Prizes: $0 spent of $3,000 allocated." },
           { id: "s4", agent: "socials", status: "skipped" },
           { id: "s5", agent: "coordination", status: "done", output: "Created task *Send Shopify booth requirements* for Sam, due Wed Nov 11." },
+        ],
+      }),
+    },
+    {
+      name: "summary-stopped", card: summaryCard({
+        runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, status: "cancelled", finishedAt: NOW, stoppedBy: "Fayez",
+        steps: [
+          { id: "s1", agent: "outreach", status: "done", output: "Shopify is now **confirmed** at $2,000 (Gold). Thank-you email sent to Priya." },
+          { id: "s2", agent: "calendar", status: "cancelled" },
+          { id: "s3", agent: "finance", status: "cancelled", output: "" },
+          { id: "s4", agent: "socials", status: "skipped" },
+          { id: "s5", agent: "coordination", status: "skipped" },
+        ],
+        sideEffects: [
+          { agent: "outreach", summary: "Email Priya Nair (Shopify): Thank you — Gold confirmed", at: NOW - 4 * MIN },
+          { agent: "outreach", summary: "Move Shopify to confirmed ($2,000, Gold)", at: NOW - 4 * MIN },
         ],
       }),
     },
@@ -174,6 +227,10 @@ export function fixtures(): Fixture[] {
     { name: "sponsors", card: sponsorsCard({ sponsors: SPONSORS, now: NOW }) },
     { name: "tasks", card: tasksCard({ tasks: TASKS, now: NOW }) },
     { name: "calendar", card: calendarCard({ events: EVENTS, dayStart: DAY_START, now: NOW, timeZone: "America/Toronto", calendarUrl: "https://calendar.google.com/calendar" }) },
+    { name: "welcome", card: welcomeCard({ docsUrl: "https://tether.example.com/docs" }) },
+    { name: "help-home", card: helpCard("home", { commands: DEMO_COMMANDS, docsUrl: "https://tether.example.com/docs" }) },
+    { name: "help-commands", card: helpCard("commands", { commands: DEMO_COMMANDS, docsUrl: "https://tether.example.com/docs" }) },
+    { name: "help-plans", card: helpCard("plans", { commands: DEMO_COMMANDS }) },
     { name: "activity", card: activityCard({ agent: "finance", emoji: "💸", title: "Log $84.20 to Food (Pizza Nova)", who: "Fayez", link: { url: "https://docs.google.com/spreadsheets/d/example", label: "Open sheet" } }) },
   ];
 }

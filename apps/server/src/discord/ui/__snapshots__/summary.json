@@ -1,0 +1,82 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 1941109,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Done · Onboard Shopify as a Gold sponsor\n-# 4/4 steps succeeded · <t:1794076200:R>"
+        },
+        {
+          "type": 10,
+          "content": "> Shopify confirmed $2k! Kick off onboarding: thank them, book the kickoff call, update the budget and tell the team."
+        },
+        {
+          "type": 14,
+          "divider": true,
+          "spacing": 1
+        },
+        {
+          "type": 10,
+          "content": "### ✅ 🤝 Sponsorship outreach\nShopify is now **confirmed** at $2,000 (Gold). Thank-you email sent to Priya with the logo spec request."
+        },
+        {
+          "type": 14,
+          "divider": true,
+          "spacing": 1
+        },
+        {
+          "type": 10,
+          "content": "### ✅ 📅 Calendar\nBooked **Shopify kickoff** Mon Nov 9, 9:00–9:30 AM on Google Meet. Invited priya@shopify.com."
+        },
+        {
+          "type": 14,
+          "divider": true,
+          "spacing": 1
+        },
+        {
+          "type": 10,
+          "content": "### ✅ 💸 Finance\nRecorded $2,000 sponsorship. Prizes: $0 spent of $3,000 allocated."
+        },
+        {
+          "type": 14,
+          "divider": true,
+          "spacing": 1
+        },
+        {
+          "type": 10,
+          "content": "### ✅ 🧭 Coordination\nCreated task *Send Shopify booth requirements* for Sam, due Wed Nov 11."
+        },
+        {
+          "type": 12,
+          "items": [
+            {
+              "media": {
+                "url": "attachment://summary-7f3c2a91.png"
+              },
+              "description": "Outcome: 4/4 steps done"
+            }
+          ]
+        },
+        {
+          "type": 10,
+          "content": "-# run 7f3c2a91"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "name": "summary-7f3c2a91.png",
+      "bytes": 47271,
+      "sha256": "475c4a7b39d9e5652bc91dd6ae4ebad191252338789824cec627fc3296b7d561"
+    }
+  ]
+}

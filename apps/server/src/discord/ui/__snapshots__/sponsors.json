@@ -1,0 +1,46 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 8353757,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Sponsor pipeline\n-# $1,500 confirmed · $3,000 in pipeline · 5 sponsors"
+        },
+        {
+          "type": 12,
+          "items": [
+            {
+              "media": {
+                "url": "attachment://sponsor-funnel.png"
+              },
+              "description": "lead 1, contacted 1, replied 1, negotiating 1, confirmed 1"
+            }
+          ]
+        },
+        {
+          "type": 10,
+          "content": "✅ **Vultr** · Silver · $1,500\n-# confirmed · last contact <t:1793903400:R> · deliverables ●○○ 1/3\n🤝 **Shopify** · Gold · $2,000\n-# negotiating · 🟠 **last contact <t:1793557800:R>**, follow up\n💬 **GoDaddy** · Bronze · $1,000\n-# replied · last contact <t:1793989800:R>\n📨 **TigerData**\n-# contacted · 🟠 **last contact <t:1793298600:R>**, follow up\n⚪ **Local Bakery**\n-# lead · never contacted"
+        },
+        {
+          "type": 10,
+          "content": "-# stale = no contact in 5 days"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "name": "sponsor-funnel.png",
+      "bytes": 30890,
+      "sha256": "a3c03bfa37294584d279585a3dc882f1c3abc6a338e51fae786dd94e062ee8db"
+    }
+  ]
+}

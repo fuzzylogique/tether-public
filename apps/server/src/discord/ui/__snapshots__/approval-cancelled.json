@@ -1,0 +1,48 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 8947584,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Post announcement: Huge thanks to Shopify, our newest Gold sponsor!\n-# 📣 Socials wants to run `post_announcement` · risk medium"
+        },
+        {
+          "type": 10,
+          "content": "⏹ **Run stopped** by Fayez before a decision · <t:1794076140:R>"
+        },
+        {
+          "type": 10,
+          "content": "**Channel**  <#000000000000000010>\n**Images**  1"
+        },
+        {
+          "type": 10,
+          "content": ">>> 🎉 Huge thanks to **Shopify**, our newest Gold sponsor! Their team will be on site Saturday with mentors and swag. #HackTrent2026"
+        },
+        {
+          "type": 12,
+          "items": [
+            {
+              "media": {
+                "url": "https://picsum.photos/seed/hacktrent-hero/1200/675"
+              },
+              "description": "hero image"
+            }
+          ]
+        },
+        {
+          "type": 10,
+          "content": "-# external · action a1b2c3d4"
+        }
+      ]
+    }
+  ],
+  "files": []
+}

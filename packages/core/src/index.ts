@@ -14,6 +14,8 @@ export { TEAM_CHANNELS, TEAM_ROLES, AGENT_CHANNEL, CHANNEL_ROLE, teamChannelFor,
 export { WORKFLOWS, workflowNames, type WorkflowTemplate } from "./workflows/registry.js";
 export { buildInboxDigest, type Digest } from "./runtime/digest.js";
 export { NUDGE_PREFIX } from "./tools/coordination.js";
+export { ACCESS_BUTTON_PREFIX, acceptDriveInvite, driveInviteFor } from "./tools/access.js";
+export { instagramAccount, instagramConfigured } from "./instagram.js";
 export { inngest, isInngestDev, type Events, type Source, type Attachment } from "./inngest/client.js";
 export { createTetherFunctions } from "./inngest/functions/index.js";
 export { generateText, generateStructured, embed } from "./runtime/gemini.js";
@@ -24,4 +26,7 @@ export {
   type IntegrationStatus, type WorkspaceSummary, type Progress,
 } from "./workspace.js";
 export type { IntegrationKey, MetricKey, WorkspaceGoals, GoalEntry } from "./db/schema.js";
-export { dashboardRunUrl, approvalCardFor, approvalContext, actionRef, settledDecision } from "./runtime/cards.js";
+export { dashboardRunUrl, messageUrl, statusCardUrl, approvalCardFor, approvalContext, actionRef, settledDecision, editOf } from "./runtime/cards.js";
+export { cancelRun, failRunUnlessCancelled } from "./runtime/cancel.js";
+export { applyEdit, editFieldsFor, fieldValue, type EditResult } from "./runtime/edit.js";
+export { refreshRunCard } from "./runtime/status.js";

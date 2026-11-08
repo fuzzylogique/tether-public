@@ -1,0 +1,107 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 7167478,
+      "components": [
+        {
+          "type": 10,
+          "content": "### 📖 Tether\nTether runs your event's operations from this server. Six agents (finance, sponsorship, tasks, calendar, socials, helpdesk) do the work; you approve anything that spends money, sends email or posts publicly.\n\n**Three ways to ask**\n• **@mention Tether** anywhere, in plain words → it proposes a plan you can edit and run.\n• **A slash command** runs one team's agent right away, e.g. `/budget summary`.\n• **`/agent`** opens a thread with one agent that remembers the conversation.\n\n**Nothing happens behind your back.** Every side effect is a card with Approve, Edit and Reject. A running plan has a Stop button on its status card."
+        },
+        {
+          "type": 14,
+          "divider": true,
+          "spacing": 1
+        },
+        {
+          "type": 10,
+          "content": "**Start here**\n1. `/tether setup name:… sheet_id:… calendar_id:…`\n2. `/tether channels` → team channels and roles\n3. `/plan request:Shopify confirmed $2k, kick off onboarding`\n\n-# Pick a topic below for more."
+        },
+        {
+          "type": 10,
+          "content": "-# help · 1 of 8"
+        },
+        {
+          "type": 1,
+          "components": [
+            {
+              "type": 3,
+              "custom_id": "help:topic",
+              "placeholder": "Pick a topic",
+              "min_values": 1,
+              "max_values": 1,
+              "options": [
+                {
+                  "label": "What Tether does",
+                  "value": "home",
+                  "description": "Overview and where to start",
+                  "default": true
+                },
+                {
+                  "label": "Getting started",
+                  "value": "start",
+                  "description": "Setup, team channels, roles",
+                  "default": false
+                },
+                {
+                  "label": "Commands",
+                  "value": "commands",
+                  "description": "Every slash command, by team",
+                  "default": false
+                },
+                {
+                  "label": "Talking to Tether",
+                  "value": "talk",
+                  "description": "Mentions, bound channels, threads",
+                  "default": false
+                },
+                {
+                  "label": "Plans and approvals",
+                  "value": "plans",
+                  "description": "The cards and their buttons",
+                  "default": false
+                },
+                {
+                  "label": "Standing workflows",
+                  "value": "workflows",
+                  "description": "Prebuilt plans that fire on events",
+                  "default": false
+                },
+                {
+                  "label": "The agents",
+                  "value": "agents",
+                  "description": "Who does what",
+                  "default": false
+                },
+                {
+                  "label": "Roles and permissions",
+                  "value": "roles",
+                  "description": "Who may approve what",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "components": [
+            {
+              "type": 2,
+              "label": "Open docs",
+              "style": 5,
+              "url": "https://tether.example.com/docs"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "files": []
+}

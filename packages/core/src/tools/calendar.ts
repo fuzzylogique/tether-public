@@ -24,6 +24,11 @@ export const createCalendarEvent = defineTool({
     location: z.string().optional(), description: z.string().optional(), attendees: z.array(z.string().email()).optional(),
   }),
   effect: "write", risk: "medium",
+  editFields: [
+    { key: "title", label: "Title", style: "short", required: true }, { key: "start", label: "Start (ISO)", style: "short", required: true },
+    { key: "end", label: "End (ISO)", style: "short", required: true }, { key: "location", label: "Where", style: "short" },
+    { key: "attendees", label: "Attendees (comma-separated emails)", style: "paragraph" },
+  ],
   summarize: (a) => `Create event "${a.title}" at ${a.start}${a.attendees?.length ? ` with ${a.attendees.length} invitees` : ""}`,
   async execute(args, ctx) {
     if (!ctx.org.calendarId) return { error: "no calendar configured" };

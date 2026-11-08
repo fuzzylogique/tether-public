@@ -53,7 +53,7 @@ export type PlanStep = {
 export type Plan = { summary: string; steps: PlanStep[] };
 
 export type RunStatus =
-  | "proposed" | "approved" | "running" | "awaiting_approval" | "done" | "failed" | "cancelled";
+  | "proposed" | "approved" | "running" | "awaiting_approval" | "done" | "failed" | "cancelled" | "expired";
 
 export const runs = pgTable("runs", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -68,11 +68,12 @@ export const runs = pgTable("runs", {
   planHistory: jsonb("plan_history").$type<Plan[]>().default([]).notNull(),
   status: text("status").$type<RunStatus>().default("proposed").notNull(),
   summary: text("summary"),
+  cancelledBy: text("cancelled_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [index("runs_org_created_idx").on(t.orgId, t.createdAt)]);
 
-export type StepStatus = "pending" | "running" | "awaiting_approval" | "done" | "failed" | "skipped";
+export type StepStatus = "pending" | "running" | "awaiting_approval" | "done" | "failed" | "skipped" | "cancelled";
 
 export const steps = pgTable("steps", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -89,7 +90,8 @@ export const steps = pgTable("steps", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [index("steps_run_idx").on(t.runId)]);
 
-export type ActionStatus = "pending" | "approved" | "rejected" | "executed" | "failed" | "denied" | "expired";
+/** `approved` is transient: a human said yes and the executor has not run yet (docs/CARDS.md §2). */
+export type ActionStatus = "pending" | "approved" | "rejected" | "executed" | "failed" | "denied" | "expired" | "cancelled";
 
 export const actions = pgTable("actions", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -103,8 +105,13 @@ export const actions = pgTable("actions", {
   effect: text("effect").notNull(),
   risk: text("risk").notNull(),
   status: text("status").$type<ActionStatus>().default("pending").notNull(),
+  /** Minimum Tether role that may decide this action, copied from `policy.decide()` ("lead" or null = organizer). */
+  approverRole: text("approver_role"),
   approverUserId: uuid("approver_user_id").references(() => users.id),
   approverDiscordId: text("approver_discord_id"),
+  editedBy: text("edited_by"),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
+  editedFields: text("edited_fields").array(),
   decisionNote: text("decision_note"),
   result: jsonb("result"),
   undoRef: jsonb("undo_ref"),
@@ -137,6 +144,8 @@ export const events = pgTable("events", {
   data: jsonb("data").$type<Record<string, unknown>>().default({}).notNull(),
 }, (t) => [
   index("events_org_time_idx").on(t.orgId, t.time),
+  // The status card's tool log reads a run's tool_call events on every redraw (docs/GUIDE.md §5.2).
+  index("events_run_time_idx").on(t.runId, t.time),
   // `create_hypertable` creates this default index (time DESC). Declaring it here keeps drizzle-kit from
   // dropping it as "unknown"; on a fresh DB drizzle creates it first and create_hypertable skips its own.
   index("events_time_idx").on(t.time.desc().nullsFirst()),

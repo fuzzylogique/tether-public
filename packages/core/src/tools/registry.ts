@@ -5,10 +5,11 @@ import { calendarTools } from "./calendar.js";
 import { coordinationTools } from "./coordination.js";
 import { socialsTools } from "./socials.js";
 import { helpdeskTools } from "./helpdesk.js";
+import { accessTools } from "./access.js";
 
 /** Fixed registry. Agents enable tools by name; they can never define new ones. */
 export const ALL_TOOLS: Tool[] = [
-  ...financeTools, ...outreachTools, ...calendarTools, ...coordinationTools, ...socialsTools, ...helpdeskTools,
+  ...financeTools, ...outreachTools, ...calendarTools, ...coordinationTools, ...socialsTools, ...helpdeskTools, ...accessTools,
 ] as unknown as Tool[];
 
 const byName = new Map(ALL_TOOLS.map((t) => [t.name, t]));

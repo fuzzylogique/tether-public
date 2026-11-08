@@ -11,7 +11,7 @@ Durable, human-curated agent workflows for event operations, with Discord as the
 5. Executor runs dependency levels in parallel; each step invokes `run-agent-step`.
 6. Agent loop (resumable) → tool call → `policy.decide()` → run / approval card / deny.
 7. Approval card → `action/decided` → tool executes → agent resumes with the result.
-8. Status embed edited in place; run recorded in `runs`, `steps`, `actions` (hypertables on Tiger).
+8. Status card edited in place (states and Stop in `CARDS.md`, per-tool-call log in `GUIDE.md`); run recorded in `runs`, `steps`, `actions` (hypertables on Tiger).
 
 ### Where things render
 `/tether channels` creates a **Tether** category with one channel per team (ops, tasks, calendar, finance, sponsorship, socials, photos), one Discord role per team (Lead, Finance, Sponsorship, Socials, Logistics; `orgs.roles`), and optionally binds each channel to its agent (`bind:true`). After that:

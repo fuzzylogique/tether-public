@@ -2,7 +2,16 @@
   "name": "coordination",
   "label": "Coordination",
   "color": "#EF9F27",
-  "description": "Tasks, owners, nudges, escalation.",
-  "tools": ["list_tasks", "create_task", "update_task", "nudge_owner", "escalate", "record_metric"],
+  "description": "Tasks, owners, nudges, escalation, team access to the Drive folder.",
+  "tools": [
+    "list_tasks",
+    "create_task",
+    "update_task",
+    "nudge_owner",
+    "escalate",
+    "record_metric",
+    "request_drive_access",
+    "share_drive_folder"
+  ],
   "maxTurns": 8
 }

@@ -6,6 +6,7 @@ import { generateWithRetry, generateStructured, generateStructuredMultimodal, ty
 import { env } from "../env.js";
 import { putObject, uploadObject } from "../storage.js";
 import { extensionFor, fetchTrustedMedia } from "../media.js";
+import { instagramConfigured, publishToInstagram, stageFeedImages } from "../instagram.js";
 
 const postSchema = z.object({
   headline: z.string().max(60),
@@ -162,6 +163,7 @@ export const postAnnouncement = defineTool({
     imageUrls: z.array(z.string().url()).max(4).optional().describe("Up to four images, e.g. recap photos"),
   }),
   effect: "external", risk: "medium",
+  editFields: [{ key: "text", label: "Post text", style: "paragraph", required: true }],
   summarize: (a) => `Post announcement: ${a.text.slice(0, 80)}`,
   async execute(args, ctx) {
     const channelId = ctx.org.channels["announcements"];
@@ -179,4 +181,29 @@ export const postAnnouncement = defineTool({
   },
 });
 
-export const socialsTools = [generatePostCopy, generateHeroImage, listEventPhotos, selectRecapPhotos, postAnnouncement];
+export const postInstagram = defineTool({
+  name: "post_instagram",
+  description: "Publish a feed post to the org's Instagram account: one image, or a carousel of 2-10 (e.g. the picked recap photos). Images are converted to JPEG and cropped to Instagram's frame automatically. The caption is the full post text, hashtags included.",
+  input: z.object({
+    caption: z.string().max(2200).describe("Full caption: copy, call to action, then hashtags (30 at most)"),
+    imageUrls: z.array(z.string().url()).min(1).max(10).describe("Recap photo URLs from select_recap_photos, or the hero image URL"),
+  }),
+  effect: "external", risk: "high",
+  editFields: [{ key: "caption", label: "Caption", style: "paragraph", required: true }],
+  summarize: (a) => `Publish to Instagram (${a.imageUrls.length === 1 ? "1 photo" : `${a.imageUrls.length}-photo carousel`}): ${a.caption.slice(0, 70)}`,
+  async execute(args, ctx) {
+    if (!instagramConfigured()) return { error: "Instagram is not connected (INSTAGRAM_ACCESS_TOKEN is unset)" };
+    if ((args.caption.match(/#[\p{L}\p{N}_]+/gu) ?? []).length > 30) return { error: "Instagram allows at most 30 hashtags" };
+    const images: Buffer[] = [];
+    for (const url of args.imageUrls) {
+      const fetched = await fetchTrustedMedia(url, { maxBytes: 25 * 1024 * 1024 });
+      if ("error" in fetched) return { error: `${url}: ${fetched.error}` };
+      images.push(fetched.buf);
+    }
+    const staged = await stageFeedImages(ctx.org.id, images);
+    const posted = await publishToInstagram({ imageUrls: staged, caption: args.caption });
+    return { ...posted, images: staged.length };
+  },
+});
+
+export const socialsTools = [generatePostCopy, generateHeroImage, listEventPhotos, selectRecapPhotos, postAnnouncement, postInstagram];
