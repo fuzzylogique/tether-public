@@ -30,7 +30,7 @@ Durable, human-curated agent workflows for event operations, with Discord as the
 `workflows/registry.ts` holds prebuilt DAGs that fire on an event instead of an organizer's request (`tether/workflow.triggered` → `run-workflow` → `run-plan`). They are approved once, when the org turns them on, so no plan card is posted; every side effect inside still goes through `policy.decide()`. `update_sponsor` fires `sponsor-confirmed` on the transition into confirmed, whoever moved the stage (the mail watcher's agent run or a human): pledged income on the sheet (approval card in #finance), deliverable tasks, welcome announcement (approval). `/workflow run` fires one by hand; `/workflow list` shows them.
 
 ### Inbox digest
-`inbox-digest` (cron `DIGEST_CRON`) and `/digest hours:24` pull the organizer inbox since the window start, summarize it in one structured Gemini call (needs-action first, then FYI), and post a card to #ops. Emails are untrusted data to the model. Sponsor replies keep their own watcher.
+`inbox-digest` (cron `DIGEST_CRON`) and `/inbox summary hours:24` (alias `/digest`) pull the organizer inbox since the window start, summarize it in one structured Gemini call (needs-action first, then FYI), and post a card to #ops. Emails are untrusted data to the model. Sponsor replies keep their own watcher.
 
 ## Agents
 finance, outreach, socials, calendar, coordination, helpdesk, builder (stretch). Each is `agents/<name>/agent.json` + `prompt.md`.
@@ -62,7 +62,7 @@ Vultr VM → Docker Compose (server, web, caddy). Inngest Cloud. Auth0 for dashb
 3. Overdue task → nudge in #tasks (or DM) → owner replies "tomorrow 3pm" → due date moves, team sees it → or "can't" → blocked, Lead pinged to reassign → or silence → escalate to lead after two nudges.
 3b. `/plan from_chat:40` in a channel where the team just argued about the closing ceremony → plan card of what was decided → approve.
 3c. `/workflow run sponsor-confirmed sponsor:Shopify amount:2000 tier:Gold` (or the outreach agent moving Shopify to confirmed) → income entry awaiting approval in #sponsorship, deliverable tasks, welcome post awaiting approval.
-3d. `/digest hours:24` → inbox card: what needs a reply, what is FYI.
+3d. `/inbox summary hours:24` → inbox card: what needs a reply, what is FYI.
 4. `/post recap` → socials lists the photos the team dropped in `#photos` → Gemini vision picks the best four with captions and stores durable copies in Object Storage → copy written to match → approval card showing all four → announcement. Hero image generation is the fallback when there is nothing to photograph yet, and it skips gracefully on a free-tier key.
 
 ## Team seams

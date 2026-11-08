@@ -58,11 +58,38 @@ async function channelTranscript(i: ChatInputCommandInteraction, n: number, befo
   return { text, count: msgs.length };
 }
 
-/** Tier 0: run a read-only tool directly, no LLM. */
 /** `/post … instagram:true` publishes to the org's Instagram account; otherwise the post stays in Discord. */
 function publishTo(i: ChatInputCommandInteraction) {
   return i.options.getBoolean("instagram") ? "publish it to Instagram with post_instagram and also post the announcement" : "post the announcement";
 }
+
+type Attachment = { url: string; contentType?: string; name?: string };
+const RECENT_PHOTO_WINDOW_MS = 15 * 60_000;
+
+/**
+ * The photo for a `/post`: the `image` option, else the newest image the same person dropped in this
+ * channel in the last 15 minutes (so "drop a photo, then type the command" works without the option).
+ */
+async function postPhoto(i: ChatInputCommandInteraction): Promise<{ attachments: Attachment[]; how: string } | undefined> {
+  const att = i.options.getAttachment("image");
+  if (att) return { attachments: [{ url: att.url, contentType: att.contentType ?? undefined, name: att.name }], how: "attached to the command" };
+  if (!i.channel || !("messages" in i.channel)) return undefined;
+  const batch = await i.channel.messages.fetch({ limit: 30 }).catch(() => undefined);
+  if (!batch) return undefined;
+  const since = Date.now() - RECENT_PHOTO_WINDOW_MS;
+  const recent = [...batch.values()].filter((m) => m.author.id === i.user.id && m.createdTimestamp > since && m.attachments.some((a) => a.contentType?.startsWith("image/")))
+    .sort((a, b) => b.createdTimestamp - a.createdTimestamp)[0];
+  if (!recent) return undefined;
+  const images = [...recent.attachments.values()].filter((a) => a.contentType?.startsWith("image/")).slice(0, 4);
+  return { attachments: images.map((a) => ({ url: a.url, contentType: a.contentType ?? undefined, name: a.name })), how: `dropped in <#${i.channelId}> ${Math.round((Date.now() - recent.createdTimestamp) / 60_000)} min ago` };
+}
+
+function photoInstruction(p: { attachments: Attachment[]; how: string }) {
+  const n = p.attachments.length;
+  return `The organizer supplied ${n === 1 ? "this photo" : `these ${n} photos`} (${p.how}): ${p.attachments.map((a) => a.url).join(" ")}. Use ${n === 1 ? "it" : "them"} as the post image${n === 1 ? "" : "s"} (pass the URL${n === 1 ? "" : "s"} as imageUrls); do not pick from #photos and do not generate a hero image.`;
+}
+
+/** Tier 0: run a read-only tool directly, no LLM. */
 
 async function runToolDirect(org: Org, i: ChatInputCommandInteraction, toolName: string, args: Record<string, unknown>) {
   const tool = getTool(toolName);
@@ -191,12 +218,19 @@ async function onCommand(i: ChatInputCommandInteraction) {
     }
     case "cal:add":
       return emitRequest(org, i, { mode: "agent", agent: "calendar", text: i.options.getString("request", true) });
-    case "post:draft":
-      return emitRequest(org, i, { mode: "agent", agent: "socials", text: `Draft a ${i.options.getString("platform") ?? "instagram"} post. Brief: ${i.options.getString("brief", true)}. Generate copy and a hero image, then ${publishTo(i)} (will be approved).` });
+    case "post:draft": {
+      const photo = await postPhoto(i);
+      const image = photo ? photoInstruction(photo) : "No photo was supplied: try generate_hero_image once and, if it is unavailable, post text only. Do not pick photos from #photos for a draft.";
+      return emitRequest(org, i, { mode: "agent", agent: "socials", attachments: photo?.attachments, text: `Draft a ${i.options.getString("platform") ?? "instagram"} post. Brief: ${i.options.getString("brief", true)}. Generate the copy. ${image} Then ${publishTo(i)} (a human approves it on the card).` });
+    }
     case "post:recap": {
       const n = i.options.getInteger("photos") ?? 4;
       const brief = i.options.getString("brief") ?? "Recap of the event so far";
-      return emitRequest(org, i, { mode: "agent", agent: "socials", text: `Create a ${i.options.getString("platform") ?? "instagram"} recap post from the team's photos. Brief: ${brief}. List the event photos, pick the best ${n} with captions, write copy that matches them, then ${publishTo(i)} with those photos (will be approved).` });
+      const photo = await postPhoto(i);
+      const photos = photo
+        ? photoInstruction(photo)
+        : `List the event photos, then call select_recap_photos once with count ${n} to pick the best ${n} with captions.`;
+      return emitRequest(org, i, { mode: "agent", agent: "socials", attachments: photo?.attachments, text: `Create a ${i.options.getString("platform") ?? "instagram"} recap post. Brief: ${brief}. ${photos} Write copy that matches the photo${n === 1 ? "" : "s"}, then ${publishTo(i)} with ${photo ? "that photo" : "those photos"} (a human approves it on the card).` });
     }
     case "plan:": {
       const request = i.options.getString("request")?.trim();
@@ -212,6 +246,7 @@ async function onCommand(i: ChatInputCommandInteraction) {
         : `Turn the team's discussion in ${channelName} (last ${count} messages) into a plan: what was decided, who owns what, and the next concrete actions.`;
       return emitRequest(org, i, { mode: "auto", text, context: `Chat transcript from ${channelName}, oldest first:\n${transcript}` });
     }
+    case "inbox:summary":
     case "digest:": {
       if (!integrationEnabled(org, "gmail")) return i.editReply("Gmail is disconnected for this workspace. `/integrations connect service:Gmail` turns it back on.");
       const hours = i.options.getInteger("hours") ?? 24;
@@ -702,8 +737,9 @@ const STARTS_WITH_ACK = new RegExp(`^${ACK_PHRASE}\\b`, "i");
 async function answerBareAck(m: Message, org: { id: string; guildId: string }, trigger: "mention" | "dm", repliedToBot = false): Promise<boolean> {
   const text = m.content.replace(/<@!?\d+>/g, "").trim();
   const bare = ACK_WORDS.test(text);
-  // "post it, what's going on" or a Discord reply to the agent's message: an answer to the agent, not a new request.
-  const answerLike = bare || (text.length <= 160 && (STARTS_WITH_ACK.test(text) || repliedToBot));
+  const photos = [...m.attachments.values()].filter((a) => a.contentType?.startsWith("image/")).map((a) => ({ url: a.url, contentType: a.contentType ?? undefined, name: a.name }));
+  // "post it, what's going on", a Discord reply to the agent's message, or a photo dropped in answer to it: not a new request.
+  const answerLike = bare || (text.length <= 160 && (STARTS_WITH_ACK.test(text) || repliedToBot)) || (repliedToBot && photos.length > 0);
   if (!answerLike) return false;
   const open = await db().select({ summary: schema.actions.summary, ref: schema.actions.messageRef }).from(schema.actions)
     .where(and(eq(schema.actions.orgId, org.id), eq(schema.actions.status, "pending"))).orderBy(desc(schema.actions.createdAt)).limit(5);
@@ -731,9 +767,9 @@ async function answerBareAck(m: Message, org: { id: string; guildId: string }, t
     name: "tether/request.received",
     data: {
       orgId: org.id, trigger, mode: "agent", agent,
-      text: `${run.request}\n\n(Earlier you replied: "${stepRow!.output!.replace(/\s+/g, " ").slice(0, 700)}". The organizer answered: "${text}". Do not ask again: call the tools to do it now. Approval happens on the card the tool call creates.)`,
+      text: `${run.request}\n\n(Earlier you replied: "${stepRow!.output!.replace(/\s+/g, " ").slice(0, 700)}". The organizer answered: "${text || "(no text)"}".${photos.length ? ` ${photoInstruction({ attachments: photos, how: "in their reply" })}` : ""} Do not ask again: call the tools to do it now. Approval happens on the card the tool call creates.)`,
       source: { channelId: m.channelId, messageId: m.id, threadId: m.channel.isThread() ? m.channel.id : undefined },
-      actorDiscordId: m.author.id, actorName: m.author.displayName,
+      actorDiscordId: m.author.id, actorName: m.author.displayName, attachments: photos.length ? photos : undefined,
     },
   });
   return true;
@@ -797,6 +833,8 @@ export async function onMessage(m: Message) {
     await inngest.send({ name: "tether/request.received", data: { orgId: org.id, trigger: "mention", mode: "agent", agent: bound, text, source: { channelId: m.channelId, messageId: m.id }, actorDiscordId: m.author.id, actorName: m.author.displayName, attachments } });
     return;
   }
+  // A reply to one of Tether's messages (with or without a mention) may be an answer to the agent that asked.
+  if (repliedToBot && !mentioned && await answerBareAck(m, org, "mention", true)) return;
   // Tier 2: mention → orchestrator
   if (mentioned && text) {
     if (await answerBareAck(m, org, "mention", repliedToBot)) return;

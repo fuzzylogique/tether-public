@@ -43,7 +43,7 @@ const GROUPS: [title: string, commands: string[]][] = [
   ["Tasks", ["task"]],
   ["Calendar", ["cal"]],
   ["Socials", ["post"]],
-  ["Any team", ["plan", "digest", "workflow", "agent"]],
+  ["Any team", ["plan", "inbox", "digest", "workflow", "agent"]],
   ["Admin", ["tether", "help"]],
 ];
 
@@ -175,7 +175,7 @@ function agentList(): string[] {
     return `${m.emoji} **${m.label}** — ${a.description}${channel ? `\n-# reports in #${channel}` : ""}`;
   });
   return [
-    ["### 🤖 The agents", "Each agent has its own tools and its own team channel. A plan picks the agents it needs; a slash command or a bound channel talks to one directly.", "", ...lines].join("\n"),
+    ["### 🤖 The agents", "Each agent has its own tools and its own team channel. A plan picks the agents it needs; a slash command or a bound channel talks to one directly.", "", ...lines, "", "-# The helpdesk has no command of its own: bind a participant channel with `/tether bind channel:#help agent:helpdesk`, or ask it with `/agent name:helpdesk`. It answers only from the FAQ, schedule and rules documents and escalates to #ops when they do not cover the question."].join("\n"),
     tryIt("/agent name:socials request:draft a thank-you post for our sponsors"),
   ];
 }

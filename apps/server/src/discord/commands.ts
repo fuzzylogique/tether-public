@@ -32,14 +32,16 @@ export const commands = [
     .addSubcommand((s) => s.setName("add").setDescription("Create an event via the calendar agent").addStringOption((o) => o.setName("request").setDescription("e.g. Judge briefing Sat 9-9:30am in Room 204").setRequired(true))),
 
   new SlashCommandBuilder().setName("post").setDescription("Socials")
-    .addSubcommand((s) => s.setName("draft").setDescription("Draft a post with image")
+    .addSubcommand((s) => s.setName("draft").setDescription("Draft a post; attach a photo or post one here just before, else text only")
       .addStringOption((o) => o.setName("brief").setDescription("What the post is about").setRequired(true))
+      .addAttachmentOption((o) => o.setName("image").setDescription("The photo for the post (or drop one in this channel right before)"))
       .addStringOption((o) => o.setName("platform").setDescription("Platform").addChoices(
         { name: "instagram", value: "instagram" }, { name: "linkedin", value: "linkedin" }, { name: "twitter", value: "twitter" }, { name: "discord", value: "discord" }))
       .addBooleanOption((o) => o.setName("instagram").setDescription("Also publish to the org's Instagram account (asks a lead first)")))
-    .addSubcommand((s) => s.setName("recap").setDescription("Recap post from the photos in #photos")
+    .addSubcommand((s) => s.setName("recap").setDescription("Recap post: Tether picks the best photos from #photos (or use the one you attach)")
       .addStringOption((o) => o.setName("brief").setDescription("What to recap, e.g. 'Day 1: opening ceremony and late-night hacking'"))
-      .addIntegerOption((o) => o.setName("photos").setDescription("How many photos (1-8, default 4)").setMinValue(1).setMaxValue(8))
+      .addIntegerOption((o) => o.setName("photos").setDescription("How many photos to pick from #photos (1-8, default 4)").setMinValue(1).setMaxValue(8))
+      .addAttachmentOption((o) => o.setName("image").setDescription("Use this one photo instead of picking from #photos"))
       .addStringOption((o) => o.setName("platform").setDescription("Platform").addChoices(
         { name: "instagram", value: "instagram" }, { name: "linkedin", value: "linkedin" }, { name: "twitter", value: "twitter" }, { name: "discord", value: "discord" }))
       .addBooleanOption((o) => o.setName("instagram").setDescription("Also publish to the org's Instagram account (asks a lead first)"))),
@@ -48,7 +50,12 @@ export const commands = [
     .addStringOption((o) => o.setName("request").setDescription("What needs to happen (optional when reading the chat)"))
     .addIntegerOption((o) => o.setName("from_chat").setDescription("Indicate the number of messages from the this channel you want to add for context.").setMinValue(5).setMaxValue(100)),
 
-  new SlashCommandBuilder().setName("digest").setDescription("Summarize the organizer inbox: what needs a reply, what is FYI")
+  new SlashCommandBuilder().setName("inbox").setDescription("The organizer inbox")
+    .addSubcommand((s) => s.setName("summary").setDescription("What needs a reply, what is FYI (same as /digest)")
+      .addIntegerOption((o) => o.setName("hours").setDescription("Window in hours (default 24)").setMinValue(1).setMaxValue(336))
+      .addStringOption((o) => o.setName("query").setDescription("Extra Gmail search terms, e.g. from:shopify.com"))),
+
+  new SlashCommandBuilder().setName("digest").setDescription("Alias of /inbox summary")
     .addIntegerOption((o) => o.setName("hours").setDescription("Window in hours (default 24)").setMinValue(1).setMaxValue(336))
     .addStringOption((o) => o.setName("query").setDescription("Extra Gmail search terms, e.g. from:shopify.com")),
 
