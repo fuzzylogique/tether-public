@@ -5,7 +5,8 @@ export async function middleware(request: NextRequest) {
   if (!auth0) return NextResponse.next();
   const res = await auth0.middleware(request);
   const path = request.nextUrl.pathname;
-  if (path.startsWith("/auth") || path === "/terms" || path === "/privacy") return res;
+  // `/demo/<org>` is the public read-only overview; the rest of the app needs a session.
+  if (path.startsWith("/auth") || path.startsWith("/demo/") || path === "/terms" || path === "/privacy") return res;
   const session = await auth0.getSession(request);
   if (!session) return NextResponse.redirect(new URL(`/auth/login?returnTo=${request.nextUrl.pathname}`, request.url));
   return res;

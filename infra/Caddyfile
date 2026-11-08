@@ -1,4 +1,6 @@
-# GoDaddy domain → this VM. Set DOMAIN in .env (e.g. tether.events). Caddy provisions TLS automatically.
+# DOMAIN in .env is the public hostname Caddy serves with automatic TLS: a real domain pointed at the VM, or the
+# zero-setup `<ip-with-dashes>.sslip.io` that infra/deploy.sh picks when no domain is given (sslip.io resolves
+# it to the VM's IP, so Let's Encrypt issues a normal certificate).
 {$DOMAIN} {
     encode zstd gzip
     handle /api/inngest* {

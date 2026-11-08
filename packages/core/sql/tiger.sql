@@ -70,3 +70,14 @@ ALTER TABLE orgs ADD COLUMN IF NOT EXISTS roles jsonb NOT NULL DEFAULT '{}'::jso
 ALTER TABLE orgs ADD COLUMN IF NOT EXISTS integrations jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE orgs ADD COLUMN IF NOT EXISTS goals jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE orgs ADD COLUMN IF NOT EXISTS event_start_at timestamptz;
+
+-- Columnstore compression on the activity stream. Event rows are append-only and repetitive (org, agent, kind),
+-- which is where Tiger's compression earns its 90%+; segmenting by org keeps one workspace's scan inside one
+-- segment. New chunks are a day wide so the policy has something to compress on day two, and the policy only
+-- touches chunks older than a day, so today's writes and the continuous aggregate refresh never meet it.
+DO $$ BEGIN
+  PERFORM set_chunk_time_interval('events', INTERVAL '1 day');
+  ALTER TABLE events SET (timescaledb.compress, timescaledb.compress_segmentby = 'org_id', timescaledb.compress_orderby = 'time DESC');
+  PERFORM add_compression_policy('events', INTERVAL '1 day', if_not_exists => TRUE);
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'events compression skipped: %', SQLERRM;
+END $$;

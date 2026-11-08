@@ -22,7 +22,7 @@ export { generateText, generateStructured, embed } from "./runtime/gemini.js";
 export * from "./ui/index.js";
 export {
   INTEGRATIONS, integrationKeys, integrationEnabled, integrationStatus, toolAllowed, maskOrg, setIntegration,
-  METRICS, PEOPLE_METRICS, setGoal, workspaceSummary, daysUntil, todayBounds,
+  METRICS, PEOPLE_METRICS, setGoal, workspaceSummary, agentActivityLast24h, daysUntil, todayBounds,
   type IntegrationStatus, type WorkspaceSummary, type Progress,
 } from "./workspace.js";
 export type { IntegrationKey, MetricKey, WorkspaceGoals, GoalEntry } from "./db/schema.js";

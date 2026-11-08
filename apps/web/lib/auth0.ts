@@ -17,6 +17,8 @@ export async function currentUser() {
     // Workspace access matches on email, so an address someone typed at sign-up without verifying it must not count.
     emailVerified: u.email_verified === true,
     picture: u.picture ? String(u.picture) : undefined,
-    roles: (u["https://tether/roles"] as string[] | undefined) ?? ["organizer"],
+    // Roles come from the Auth0 Action in docs/AUTH0.md. No claim means no Auth0-granted role; the user's row
+    // in `users` (created by `/workspace web`) still decides what they can see.
+    roles: Array.isArray(u["https://tether/roles"]) ? (u["https://tether/roles"] as string[]) : [],
   };
 }

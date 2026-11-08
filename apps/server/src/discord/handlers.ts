@@ -1,17 +1,18 @@
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, MessageFlags, ModalBuilder, PermissionFlagsBits, TextInputBuilder, TextInputStyle,
+  ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelType, MessageFlags, ModalBuilder, PermissionFlagsBits, TextInputBuilder, TextInputStyle,
   type Guild, type Interaction, type Message, type ChatInputCommandInteraction, type AutocompleteInteraction,
   type ButtonInteraction, type StringSelectMenuInteraction, type ModalSubmitInteraction,
 } from "discord.js";
 import { and, desc, eq, gt, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import {
-  WORKFLOWS, acceptDriveInvite, agentNames, integrationEnabled, toolAllowed, agents, applyEdit, approvalCardFor, budgetCard, buildInboxDigest, buildToolCtx, calendarCard, cancelRun, dashboardRunUrl, db, digestCard, driveInviteFor, editFieldsFor, fieldValue, getTool, hasRole, helpCard, inngest, isHelpTopic, isLiveRun, loadActor,
+  WORKFLOWS, acceptDriveInvite, agentActivityLast24h, agentNames, integrationEnabled, toolAllowed, agents, applyEdit, approvalCardFor, budgetCard, buildInboxDigest, buildToolCtx, calendarCard, cancelRun, dashboardRunUrl, db, digestCard, driveInviteFor, editFieldsFor, fieldValue, getTool, hasRole, helpCard, inngest, isHelpTopic, isLiveRun, loadActor,
   loadOrgByGuild, planCard, refreshRunCard, schema, settledDecision, sponsorsCard, tasksCard, teamChannelFor, welcomeCard, workflowNames,
   type ApprovalDecision, type BudgetExtras, type BudgetRow, type EventRow, type Plan, type PlanDecision, type SponsorRow, type TaskRow,
 } from "@tether/core";
 import { planEmbed, resultEmbed } from "./embeds.js";
 import { DiscordNotifier, planComponents } from "./notifier.js";
 import { render, renderEdit } from "./ui/render.js";
+import { chartPng } from "./ui/raster.js";
 import { linksText, provisionTeamChannels } from "./teams.js";
 import { WORKSPACE_COMMANDS, onWorkspaceCommand } from "./workspace.js";
 import { commandCatalog, docsUrl } from "./catalog.js";
@@ -360,7 +361,20 @@ async function onTether(i: ChatInputCommandInteraction, org: Org | undefined) {
       proposed: "⏸ waiting for you to press Run", approved: "▶ starting", running: "⚙️ working", awaiting_approval: "✋ waiting for an approval",
       done: "✅ done", failed: "❌ failed", cancelled: "⏹ stopped", expired: "⌛ expired",
     };
-    return i.reply({ ephemeral: true, content: rows.length ? rows.map((r) => `• ${word[r.status] ?? r.status} · ${r.request.replace(/\s+/g, " ").slice(0, 60)} · <t:${Math.floor(r.createdAt.getTime() / 1000)}:R>`).join("\n") : "No runs yet." });
+    // The 24-hour sparkline reads the TigerData continuous aggregate, the same source as the dashboard card.
+    const activity = await agentActivityLast24h(org.id);
+    const total = activity.hours.reduce((sum, h) => sum + h.n, 0);
+    const labels = Object.fromEntries(Object.values(agents()).map((a) => [a.name, a.label]));
+    const byAgent = activity.byAgent.map((a) => `${labels[a.agent] ?? a.agent} ${a.n}`);
+    const png = total ? await chartPng({
+      type: "sparkline", title: "Agent activity", points: activity.hours.map((h) => h.n),
+      caption: `${total} events in 24 h · ${byAgent.slice(0, 2).join(" · ")}`,
+    }) : undefined;
+    const lines = rows.length ? rows.map((r) => `• ${word[r.status] ?? r.status} · ${r.request.replace(/\s+/g, " ").slice(0, 60)} · <t:${Math.floor(r.createdAt.getTime() / 1000)}:R>`).join("\n") : "No runs yet.";
+    return i.reply({
+      ephemeral: true, content: png ? `${lines}\n-# ${byAgent.join(" · ")} · from the Tiger continuous aggregate, refreshed every 5 minutes.` : lines,
+      files: png ? [new AttachmentBuilder(png, { name: "activity.png" })] : [],
+    });
   }
 }
 

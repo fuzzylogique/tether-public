@@ -1,4 +1,8 @@
-# Vultr VM: docker compose -f infra/docker-compose.yml --env-file .env up -d --build
+# Vultr VM. `infra/deploy.sh <ip>` runs this for you; by hand:
+#   docker compose -f infra/docker-compose.yml --env-file .env up -d --build                # dashboard + Caddy
+#   docker compose -f infra/docker-compose.yml --env-file .env --profile bot up -d --build  # ...and the Discord bot
+# The bot is a profile because a Discord token may only hold ONE gateway connection: start it on the VM only
+# after the laptop's `pnpm dev:server` is stopped, or both will answer every interaction.
 services:
   server:
     build: { context: .., dockerfile: infra/Dockerfile.server }
@@ -7,6 +11,7 @@ services:
       - SERVER_PORT=3001
     restart: unless-stopped
     expose: ["3001"]
+    profiles: ["bot"]
 
   web:
     build: { context: .., dockerfile: infra/Dockerfile.web }
@@ -23,4 +28,4 @@ services:
       - ./caddy_data:/data
     environment:
       - DOMAIN=${DOMAIN:-localhost}
-    depends_on: [server, web]
+    depends_on: [web]

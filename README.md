@@ -5,9 +5,12 @@ Agentic event operations for hackathons and club events, run from Discord with a
 Organizers talk to Tether in Discord. It proposes a plan, they tick the steps they want, and specialized agents (finance, sponsorship outreach, socials, calendar, coordination, helpdesk) do the work through Google Sheets, Gmail, and Calendar. Anything risky waits for a human. Every run is traceable on the dashboard.
 
 ## Stack
-Discord (discord.js) · Gemini (`@google/genai`, function calling + structured output + vision + image gen) · Inngest (durable workflows, human-in-the-loop waits, cron) · TigerData Postgres (hypertables, pgvector hybrid search, forks) · Auth0 (dashboard login, roles) · Next.js dashboard · Vultr VM + Object Storage · GoDaddy domain · Entire (agent session checkpoints).
+Discord (discord.js) · Gemini (`@google/genai`, function calling + structured output + vision + image gen) · Inngest (durable workflows, human-in-the-loop waits, cron) · TigerData Postgres (hypertables, pgvector hybrid search, forks) · Auth0 (dashboard login, roles) · Next.js dashboard · Vultr VM + Object Storage · Entire (agent session checkpoints).
 
-## First run
+## Run it yourself
+[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) takes you from an empty Discord server to a working Tether with your own keys.
+
+## First run (team)
 ```bash
 git clone <repo> && cd tether
 entire enable --agent claude-code     # every teammate, once per clone
@@ -32,8 +35,8 @@ Pre-demo adversarial review (two independent reviewers, Nov 7): [docs/REVIEW.md]
 - **Google**: OAuth client (Desktop/Web), consent screen in Testing with organizers as test users, scopes for Sheets, Gmail (send + readonly), Calendar, Drive. Obtain a refresh token once (any OAuth playground works) and put it in `.env`.
 - **TigerData**: Tiger Cloud service URL as `DATABASE_URL`.
 - **Inngest**: free cloud keys for prod; blank for the local dev server.
-- **Auth0**: Regular Web App, callback `${APP_BASE_URL}/auth/callback`, logout `${APP_BASE_URL}`. Add an Action that puts roles on the ID token as `https://tether/roles`.
-- **Vultr**: VM (Docker) + Object Storage keys. Deploy with `docker compose -f infra/docker-compose.yml --env-file .env up -d --build` and point the GoDaddy A record at the VM.
+- **Auth0**: Regular Web App, callback `${APP_BASE_URL}/auth/callback`, logout `${APP_BASE_URL}`. Step by step, with the roles Action, in `docs/AUTH0.md`.
+- **Vultr**: Object Storage keys for receipts and photos, and a VM for the deploy: `VULTR_API_KEY=… infra/vultr-create.sh` makes the VM, `infra/deploy.sh <ip>` ships the dashboard behind Caddy with TLS on an `sslip.io` hostname (no domain needed), `--bot` adds the Discord gateway.
 
 ## Planner evaluation
 `pnpm eval:plans` runs the fixture set and prints validity, agent precision/recall, and dependency correctness. Decision gate is in `docs/ARCHITECTURE.md`.
