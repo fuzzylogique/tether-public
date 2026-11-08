@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from "discord.js";
+import { HELP_TOPICS } from "@tether/core";
 
 export const commands = [
   new SlashCommandBuilder().setName("budget").setDescription("Finances")
@@ -64,6 +65,9 @@ export const commands = [
   new SlashCommandBuilder().setName("agent").setDescription("Open a thread with one specialized agent")
     .addStringOption((o) => o.setName("name").setDescription("Agent").setRequired(true).setAutocomplete(true))
     .addStringOption((o) => o.setName("request").setDescription("First message").setRequired(true)),
+
+  new SlashCommandBuilder().setName("help").setDescription("How to use Tether: commands, plans, approvals, roles")
+    .addStringOption((o) => o.setName("topic").setDescription("Jump straight to a topic").addChoices(...HELP_TOPICS.map((t) => ({ name: t.label, value: t.value })))),
 
   new SlashCommandBuilder().setName("tether").setDescription("Setup and admin")
     .addSubcommand((s) => s.setName("setup").setDescription("Configure this server")

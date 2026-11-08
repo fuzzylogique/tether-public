@@ -10,3 +10,4 @@ export { sponsorsCard, type SponsorRow } from "./sponsors.js";
 export { tasksCard, type TaskRow } from "./tasks.js";
 export { calendarCard, type EventRow } from "./calendar.js";
 export { digestCard } from "./digest.js";
+export { helpCard, commandGroups, isHelpTopic, HELP_TOPICS, type HelpTopic, type CommandDoc } from "./help.js";

@@ -1,11 +1,11 @@
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle,
   type Interaction, type Message, type ChatInputCommandInteraction, type AutocompleteInteraction,
   type ButtonInteraction, type StringSelectMenuInteraction, type ModalSubmitInteraction,
 } from "discord.js";
 import { and, desc, eq, gt, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import {
-  WORKFLOWS, acceptDriveInvite, agentNames, agents, applyEdit, approvalCardFor, budgetCard, buildInboxDigest, buildToolCtx, calendarCard, cancelRun, dashboardRunUrl, db, digestCard, driveInviteFor, editFieldsFor, fieldValue, getTool, hasRole, inngest, isLiveRun, loadActor,
+  WORKFLOWS, acceptDriveInvite, agentNames, agents, applyEdit, approvalCardFor, budgetCard, buildInboxDigest, buildToolCtx, calendarCard, cancelRun, dashboardRunUrl, db, digestCard, driveInviteFor, editFieldsFor, fieldValue, getTool, hasRole, helpCard, inngest, isHelpTopic, isLiveRun, loadActor,
   loadOrgByGuild, planCard, refreshRunCard, schema, settledDecision, sponsorsCard, tasksCard, teamChannelFor, workflowNames,
   type ApprovalDecision, type BudgetExtras, type BudgetRow, type EventRow, type Plan, type PlanDecision, type SponsorRow, type TaskRow,
 } from "@tether/core";
@@ -13,13 +13,14 @@ import { planEmbed, resultEmbed } from "./embeds.js";
 import { DiscordNotifier, planComponents } from "./notifier.js";
 import { render, renderEdit } from "./ui/render.js";
 import { linksText, provisionTeamChannels } from "./teams.js";
+import { commandCatalog, docsUrl } from "./catalog.js";
 
 type Org = typeof schema.orgs.$inferSelect;
 
 async function requireOrg(i: ChatInputCommandInteraction): Promise<Org | undefined> {
   if (!i.guildId) { await i.reply({ content: "Use this in a server.", ephemeral: true }); return; }
   const org = await loadOrgByGuild(i.guildId);
-  if (!org && i.commandName !== "tether") { await i.reply({ content: "This server isn't set up yet. Run `/tether setup`.", ephemeral: true }); return; }
+  if (!org && i.commandName !== "tether" && i.commandName !== "help") { await i.reply({ content: "This server isn't set up yet. Run `/tether setup`.\n-# New here? `/help start`", ephemeral: true }); return; }
   return org;
 }
 
@@ -96,7 +97,31 @@ async function onAutocomplete(i: AutocompleteInteraction) {
   return i.respond([]);
 }
 
+/**
+ * `/help`: an ephemeral guide card with a topic select (docs/GUIDE.md §3). No org needed, so a server
+ * that is not set up yet can still read how to set up. `help_opened` events let the dashboard see
+ * which topics people read; without an org there is nowhere to record them.
+ */
+async function onHelp(i: ChatInputCommandInteraction, org: Org | undefined) {
+  const picked = i.options.getString("topic") ?? undefined;
+  const topic = isHelpTopic(picked) ? picked : "home";
+  await i.reply({ ...(await render(helpCard(topic, { commands: commandCatalog(), docsUrl: docsUrl() }))), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
+  if (org) await db().insert(schema.events).values({ orgId: org.id, kind: "help_opened", data: { topic, discordId: i.user.id } });
+}
+
+/** A topic pick or Home on the help card: swap the body in place and note the topic. */
+async function onHelpTopic(i: StringSelectMenuInteraction | ButtonInteraction, picked: string | undefined) {
+  const topic = isHelpTopic(picked) ? picked : "home";
+  await i.update(await renderEdit(helpCard(topic, { commands: commandCatalog(), docsUrl: docsUrl() })));
+  const org = i.guildId ? await loadOrgByGuild(i.guildId) : undefined;
+  if (org) await db().insert(schema.events).values({ orgId: org.id, kind: "help_opened", data: { topic, discordId: i.user.id } });
+}
+
 async function onCommand(i: ChatInputCommandInteraction) {
+  if (i.commandName === "help") {
+    const org = i.guildId ? await loadOrgByGuild(i.guildId) : undefined;
+    return onHelp(i, org);
+  }
   const org = await requireOrg(i);
   if (i.commandName === "tether") return onTether(i, org);
   if (!org) return;
@@ -378,6 +403,7 @@ async function repairPlan(i: Interactive, inMessage: boolean, run: Run) {
 
 async function onButton(customId: string, i: ButtonInteraction) {
   const [kind, verb, id, sub] = customId.split(":");
+  if (kind === "help" && verb === "home") return onHelpTopic(i, "home");
   if (kind === "access" && verb === "share" && id) {
     const check = await driveInviteFor({ inviteId: id, discordId: i.user.id, memberRoleIds: memberRoleIds(i) });
     if ("error" in check) return i.reply({ content: check.error, ephemeral: true });
@@ -528,6 +554,7 @@ async function decideAction(i: Interactive, action: ActionRow, approved: boolean
 
 async function onSelect(customId: string, values: string[], i: StringSelectMenuInteraction) {
   const [kind, verb, id] = customId.split(":");
+  if (kind === "help" && verb === "topic") return onHelpTopic(i, values[0]);
   if (kind !== "plan" || verb !== "select" || !id) return;
   const run = await loadRun(id);
   if (!run?.plan) return i.reply({ content: "Plan not found.", ephemeral: true });

@@ -6,7 +6,7 @@ import type { Plan } from "../db/schema.js";
 import type { ActionRef } from "../tools/types.js";
 import { TETHER } from "./tokens.js";
 import { kv, sep, text, type Card } from "./card.js";
-import { activityCard, approvalCard, budgetCard, calendarCard, planCard, sponsorsCard, statusCard, summaryCard, tasksCard, type StepState } from "./cards/index.js";
+import { activityCard, approvalCard, budgetCard, calendarCard, helpCard, planCard, sponsorsCard, statusCard, summaryCard, tasksCard, type CommandDoc, type StepState } from "./cards/index.js";
 
 export const DEFAULT_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png";
 
@@ -124,6 +124,17 @@ export const EVENTS = [
   { title: "Midnight snack", start: at(23, 30), end: at(24), location: "Atrium" },
 ];
 
+/** A slice of the real command set, enough to exercise every line shape on the Commands topic. */
+export const DEMO_COMMANDS: CommandDoc[] = [
+  { name: "budget", description: "Finances", subcommands: [
+    { name: "summary", description: "Allocated vs spent", options: [{ name: "category", description: "Category", required: false }] },
+    { name: "log", description: "Log an expense", options: [{ name: "amount", description: "Amount", required: true }, { name: "category", description: "Category", required: true }, { name: "vendor", description: "Vendor", required: false }] },
+  ] },
+  { name: "task", description: "Coordination", subcommands: [{ name: "list", description: "Tasks", options: [{ name: "overdue", description: "Only overdue", required: false }] }] },
+  { name: "plan", description: "Multi-step request: Tether proposes a plan you approve", subcommands: [{ description: "Multi-step request: Tether proposes a plan you approve", options: [{ name: "request", description: "What needs to happen", required: false }, { name: "from_chat", description: "Read the last N messages", required: false }] }] },
+  { name: "help", description: "How to use Tether", subcommands: [{ description: "How to use Tether", options: [{ name: "topic", description: "Topic", required: false }] }] },
+];
+
 export function fixtures(): Fixture[] {
   const channels = { announcements: "000000000000000010", ops: "000000000000000011" };
   return [
@@ -207,6 +218,9 @@ export function fixtures(): Fixture[] {
     { name: "sponsors", card: sponsorsCard({ sponsors: SPONSORS, now: NOW }) },
     { name: "tasks", card: tasksCard({ tasks: TASKS, now: NOW }) },
     { name: "calendar", card: calendarCard({ events: EVENTS, dayStart: DAY_START, now: NOW, timeZone: "America/Toronto", calendarUrl: "https://calendar.google.com/calendar" }) },
+    { name: "help-home", card: helpCard("home", { commands: DEMO_COMMANDS, docsUrl: "https://tether.example.com/docs" }) },
+    { name: "help-commands", card: helpCard("commands", { commands: DEMO_COMMANDS, docsUrl: "https://tether.example.com/docs" }) },
+    { name: "help-plans", card: helpCard("plans", { commands: DEMO_COMMANDS }) },
     { name: "activity", card: activityCard({ agent: "finance", emoji: "💸", title: "Log $84.20 to Food (Pizza Nova)", who: "Fayez", link: { url: "https://docs.google.com/spreadsheets/d/example", label: "Open sheet" } }) },
   ];
 }
