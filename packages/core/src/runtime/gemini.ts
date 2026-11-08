@@ -23,6 +23,16 @@ export function ai(apiKey = geminiKeys()[0] ?? "") {
 const exhaustedAt = new Map<string, number>();
 const EXHAUSTED_TTL_MS = 60 * 60 * 1000;
 const tail = (k: string) => `…${k.slice(-4)}`;
+const DAILY_QUOTA = /per day/i;
+const NO_CREDITS = /"code":\s*402|prepayment credits/i;
+
+/** One sentence for the status card when the planner gave up; the raw API error is a JSON blob. */
+export function draftFailureNote(error: string): string {
+  if (NO_CREDITS.test(error)) return "Gemini is out of prepaid credits. Top up the project or set a new GEMINI_API_KEY, then ask again.";
+  if (DAILY_QUOTA.test(error)) return "Gemini's daily quota is used up. Add a key to GEMINI_API_KEYS or try again later.";
+  if (error.startsWith("planner failed validation")) return "Tether could not draft a valid plan for that. Try rewording the request.";
+  return `Tether could not draft a plan: ${error.slice(0, 200)}`;
+}
 
 function usableKey(model: string): string | undefined {
   const now = Date.now();
@@ -45,6 +55,7 @@ export function geminiRoute(model: string): { model: string; key?: string; fallb
  * Retries 429/503 with exponential backoff and honors "retry in Ns" hints (free-tier Flash is ~20 RPM).
  * A daily-quota 429 rotates to the next configured key for the same model; when every key is exhausted
  * for that model it drops to GEMINI_MODEL_FALLBACK (rotating again), and only then gives up.
+ * An empty prepaid balance (402) takes the same path: backing off cannot refill it.
  */
 export type RetryWait = { model: string; attempt: number; attempts: number; waitMs: number; reason: string };
 
@@ -62,24 +73,24 @@ export async function generateWithRetry(
       return await ai(key).models.generateContent({ ...params, model });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      const dailyQuota = /per day/i.test(msg);
-      if (dailyQuota) {
+      const spent = NO_CREDITS.test(msg) ? "out of prepaid credits" : DAILY_QUOTA.test(msg) ? "daily quota exhausted" : undefined;
+      if (spent) {
         exhaustedAt.set(`${model}::${key}`, Date.now());
         const nextKey = usableKey(model);
         if (nextKey) {
-          console.warn(`[gemini] daily quota exhausted for ${model} on key ${tail(key)}; switching to key ${tail(nextKey)}`);
+          console.warn(`[gemini] ${spent} for ${model} on key ${tail(key)}; switching to key ${tail(nextKey)}`);
           key = nextKey;
           continue;
         }
         const fallback = env().GEMINI_MODEL_FALLBACK;
         const fbKey = fallback && fallback !== model ? usableKey(fallback) : undefined;
         if (fbKey) {
-          console.warn(`[gemini] daily quota exhausted for ${model} on every key; falling back to ${fallback}`);
+          console.warn(`[gemini] ${spent} for ${model} on every key; falling back to ${fallback}`);
           model = fallback;
           key = fbKey;
           continue;
         }
-        // Daily quota won't recover for hours; an Inngest retry would only burn more requests.
+        // Neither recovers on its own for hours; an Inngest retry would only burn more requests.
         throw new NonRetriableError(msg, { cause: e });
       }
       const retryable = /"code":(429|503)|RESOURCE_EXHAUSTED|UNAVAILABLE|high demand/.test(msg);

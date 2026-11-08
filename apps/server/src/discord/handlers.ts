@@ -35,7 +35,6 @@ async function emitRequest(org: Org, i: ChatInputCommandInteraction, data: {
   // (mode auto) stay where they were asked for: the people in that conversation review them.
   const team = data.mode === "agent" && data.agent && !data.threadId ? teamChannelFor(org, data.agent) : undefined;
   const channelId = team && team !== i.channelId ? team : i.channelId;
-  if (channelId !== i.channelId) await i.editReply({ content: `${agents()[data.agent!]?.label ?? data.agent} is on it in <#${channelId}>.`, allowedMentions: { parse: [] } });
   await inngest.send({
     name: "tether/request.received",
     data: {
@@ -44,6 +43,9 @@ async function emitRequest(org: Org, i: ChatInputCommandInteraction, data: {
       actorDiscordId: i.user.id, actorName: i.user.displayName, attachments: data.attachments,
     },
   });
+  // The run's cards are new messages, so nothing else ever resolves the deferred "thinking…" reply.
+  const who = agents()[data.agent ?? ""]?.label ?? data.agent ?? "Tether";
+  await i.editReply({ content: channelId === i.channelId ? `${who} is on it.` : `${who} is on it in <#${channelId}>.`, allowedMentions: { parse: [] } });
 }
 
 /** The last N human messages in a channel as a transcript the planner can reason over. */
