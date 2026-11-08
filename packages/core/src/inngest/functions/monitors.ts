@@ -3,6 +3,7 @@ import { inngest } from "../client.js";
 import { db } from "../../db/client.js";
 import { events, orgs, processedMail, sponsors, sponsorThreads, tasks } from "../../db/schema.js";
 import { searchMail } from "../../google/gmail.js";
+import { integrationEnabled } from "../../workspace.js";
 import { env } from "../../env.js";
 import { buildInboxDigest } from "../../runtime/digest.js";
 import { digestCard } from "../../ui/cards/digest.js";
@@ -104,6 +105,7 @@ export const pollSponsorMailFn = inngest.createFunction(
     let dispatched = 0;
     let duplicates = 0;
     for (const org of allOrgs) {
+      if (!integrationEnabled(org, "gmail")) continue;
       const channelId = org.channels["sponsorship"] ?? org.channels["ops"];
       const list = await db().select().from(sponsors).where(eq(sponsors.orgId, org.id));
       const emails = list.map((s) => s.contactEmail).filter((e): e is string => !!e);
@@ -153,7 +155,7 @@ function buildDigestFn(notifier: Notifier) {
       const allOrgs = await step.run("orgs", () => db().select().from(orgs));
       // One inbox serves every org on this instance (single organizer Google account), so the
       // digest is built once and posted to each org that has somewhere to put it.
-      const targets = allOrgs.map((o) => ({ orgId: o.id, channelId: o.channels["digest"] ?? o.channels["ops"] })).filter((t): t is { orgId: string; channelId: string } => !!t.channelId);
+      const targets = allOrgs.filter((o) => integrationEnabled(o, "gmail")).map((o) => ({ orgId: o.id, channelId: o.channels["digest"] ?? o.channels["ops"] })).filter((t): t is { orgId: string; channelId: string } => !!t.channelId);
       if (!targets.length) return { skipped: "no ops channel configured" };
       const digest = await step.run("build", () => buildInboxDigest({ hours: env().DIGEST_HOURS }));
       for (const t of targets) {

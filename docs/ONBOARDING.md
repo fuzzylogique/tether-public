@@ -21,7 +21,7 @@ npm i -g pnpm
 pnpm install
 pnpm env:check                               # every line should be ✔ or –, never ✘
 ```
-`pnpm env:check` validates every credential with a real call and prints the Discord invite URL if the bot is missing from a server.
+`pnpm env:check` validates every credential with a real call and prints the Discord invite URL (Administrator) if the bot is missing from a server or lacks Administrator; opening it again on a server the bot is already in upgrades its role.
 
 ## 3. Run (three terminals)
 ```bash

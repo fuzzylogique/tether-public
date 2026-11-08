@@ -1,31 +1,49 @@
-import { db, schema } from "@tether/core";
-import { desc, eq, sql } from "drizzle-orm";
+import { db, hasRole, schema } from "@tether/core";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { authConfigured, currentUser } from "./auth0";
 
-export async function firstOrg() {
-  const [org] = await db().select().from(schema.orgs).limit(1);
-  return org;
+type User = NonNullable<Awaited<ReturnType<typeof currentUser>>>;
+
+/**
+ * Workspace membership for a signed-in person: `users` rows matched by Auth0 subject or email
+ * (`/workspace web email:` in Discord creates them). Without Auth0 configured (local dev) every
+ * workspace is visible and editable.
+ */
+async function memberships(user: User) {
+  if (!authConfigured) return undefined;
+  const email = user.emailVerified ? user.email.toLowerCase() : "";
+  const conds = [user.sub ? eq(schema.users.auth0Sub, user.sub) : undefined, email ? sql`lower(${schema.users.email}) = ${email}` : undefined].filter((c) => c !== undefined);
+  if (!conds.length) return [];
+  return db().select({ orgId: schema.users.orgId, roles: schema.users.roles }).from(schema.users).where(or(...conds));
 }
 
-export async function overview(orgId: string) {
-  const lines = await db().select().from(schema.budgetLines).where(eq(schema.budgetLines.orgId, orgId));
-  const spent = await db().select({ category: schema.expenses.category, total: sql<string>`coalesce(sum(${schema.expenses.amount}),0)` })
-    .from(schema.expenses).where(eq(schema.expenses.orgId, orgId)).groupBy(schema.expenses.category);
-  const spentBy = Object.fromEntries(spent.map((s) => [s.category, Number(s.total)]));
-  const budget = lines.map((l) => ({ category: l.category, allocated: Number(l.allocated), spent: spentBy[l.category] ?? 0 }));
-  const sponsors = await db().select().from(schema.sponsors).where(eq(schema.sponsors.orgId, orgId));
-  const tasks = await db().select().from(schema.tasks).where(eq(schema.tasks.orgId, orgId));
-  const pending = await db().select().from(schema.actions).where(sql`${schema.actions.orgId} = ${orgId} and ${schema.actions.status} = 'pending'`);
-  const recentRuns = await db().select().from(schema.runs).where(eq(schema.runs.orgId, orgId)).orderBy(desc(schema.runs.createdAt)).limit(8);
-  const activity = await db().select().from(schema.events).where(eq(schema.events.orgId, orgId)).orderBy(desc(schema.events.time)).limit(30);
-  return { budget, sponsors, tasks, pending, recentRuns, activity };
+export async function workspacesFor(user: User) {
+  const m = await memberships(user);
+  if (m && !m.length) return [];
+  const orgRows = await db().select().from(schema.orgs)
+    .where(m ? inArray(schema.orgs.id, [...new Set(m.map((r) => r.orgId))]) : undefined)
+    .orderBy(schema.orgs.name);
+  if (!orgRows.length) return [];
+  const pending = await db().select({ orgId: schema.actions.orgId, n: sql<number>`count(*)::int` }).from(schema.actions)
+    .where(and(inArray(schema.actions.orgId, orgRows.map((o) => o.id)), eq(schema.actions.status, "pending")))
+    .groupBy(schema.actions.orgId);
+  const last = await db().select({ orgId: schema.actions.orgId, at: sql<Date | null>`max(${schema.actions.executedAt})` }).from(schema.actions)
+    .where(inArray(schema.actions.orgId, orgRows.map((o) => o.id))).groupBy(schema.actions.orgId);
+  const pend = new Map(pending.map((p) => [p.orgId, p.n]));
+  const lastAt = new Map(last.map((l) => [l.orgId, l.at ? new Date(l.at) : null]));
+  return orgRows.map((o) => ({ org: o, pending: pend.get(o.id) ?? 0, lastActivity: lastAt.get(o.id) ?? null }));
 }
 
-export async function pendingActions(orgId: string) {
-  return db().select().from(schema.actions).where(sql`${schema.actions.orgId} = ${orgId} and ${schema.actions.status} = 'pending'`).orderBy(desc(schema.actions.createdAt));
-}
-
-export async function runsList(orgId: string) {
-  return db().select().from(schema.runs).where(eq(schema.runs.orgId, orgId)).orderBy(desc(schema.runs.createdAt)).limit(50);
+/** The workspace if this person may see it, plus whether they may change its settings (organizer and up). */
+export async function workspaceFor(user: User, orgId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(orgId)) return undefined;
+  const [org] = await db().select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
+  if (!org) return undefined;
+  const m = await memberships(user);
+  if (!m) return { org, canEdit: true };
+  const rows = m.filter((r) => r.orgId === orgId);
+  if (!rows.length) return undefined;
+  return { org, canEdit: rows.some((r) => hasRole(r.roles, "organizer")) };
 }
 
 export async function runDetail(runId: string) {
@@ -37,6 +55,3 @@ export async function runDetail(runId: string) {
   return { run, steps: stepRows, actions: actionRows, events: evs };
 }
 
-export async function policiesList(orgId: string) {
-  return db().select().from(schema.policies).where(eq(schema.policies.orgId, orgId)).orderBy(schema.policies.priority);
-}

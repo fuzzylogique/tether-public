@@ -7,6 +7,8 @@ COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile=false --filter @tether/web...
 COPY packages/core packages/core
 COPY apps/web apps/web
+# Small VMs (2 GB) hit Node's default heap cap during `next build`; let it spill into swap.
+ENV NODE_OPTIONS=--max-old-space-size=3072
 RUN pnpm --filter @tether/web build
 
 FROM node:22-alpine

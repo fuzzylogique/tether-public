@@ -3,6 +3,13 @@ import {
 } from "drizzle-orm/pg-core";
 
 // ---------- Tenancy & identity ----------
+// One org is one workspace: an event (Hack Trent, Hack the North) run from its own Discord server.
+export type IntegrationKey = "gmail" | "calendar" | "sheets" | "docs";
+/** Metrics every workspace overview shows. Sponsorship and budget progress are computed from the ledger. */
+export type MetricKey = "sponsorship" | "registrations" | "volunteers" | "mentors" | "judges";
+export type GoalEntry = { target?: number; current?: number; source?: string; updatedAt?: string };
+export type WorkspaceGoals = Partial<Record<MetricKey, GoalEntry>>;
+
 export const orgs = pgTable("orgs", {
   id: uuid("id").primaryKey().defaultRandom(),
   guildId: text("guild_id").notNull().unique(),
@@ -16,6 +23,10 @@ export const orgs = pgTable("orgs", {
   channelAgents: jsonb("channel_agents").$type<Record<string, string>>().default({}).notNull(),
   // team key (lead, finance, sponsorship, socials, logistics) -> Discord role id, created by `/tether channels`
   roles: jsonb("roles").$type<Record<string, string>>().default({}).notNull(),
+  // Per-workspace integration switches. A missing key means on, so existing orgs keep working.
+  integrations: jsonb("integrations").$type<Partial<Record<IntegrationKey, boolean>>>().default({}).notNull(),
+  goals: jsonb("goals").$type<WorkspaceGoals>().default({}).notNull(),
+  eventStartAt: timestamp("event_start_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

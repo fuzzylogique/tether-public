@@ -67,3 +67,6 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS last_reply text;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS last_reply_at timestamptz;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS notes text;
 ALTER TABLE orgs ADD COLUMN IF NOT EXISTS roles jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE orgs ADD COLUMN IF NOT EXISTS integrations jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE orgs ADD COLUMN IF NOT EXISTS goals jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE orgs ADD COLUMN IF NOT EXISTS event_start_at timestamptz;

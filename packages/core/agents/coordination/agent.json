@@ -9,6 +9,7 @@
     "update_task",
     "nudge_owner",
     "escalate",
+    "record_metric",
     "request_drive_access",
     "share_drive_folder"
   ],
