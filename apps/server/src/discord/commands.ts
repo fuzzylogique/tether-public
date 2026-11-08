@@ -42,7 +42,7 @@ export const commands = [
 
   new SlashCommandBuilder().setName("plan").setDescription("Multi-step request: Tether proposes a plan you approve")
     .addStringOption((o) => o.setName("request").setDescription("What needs to happen (optional when reading the chat)"))
-    .addIntegerOption((o) => o.setName("from_chat").setDescription("Also read the last N messages in this channel and plan from the discussion").setMinValue(5).setMaxValue(100)),
+    .addIntegerOption((o) => o.setName("from_chat").setDescription("Indicate the number of messages from the this channel you want to add for context.").setMinValue(5).setMaxValue(100)),
 
   new SlashCommandBuilder().setName("digest").setDescription("Summarize the organizer inbox: what needs a reply, what is FYI")
     .addIntegerOption((o) => o.setName("hours").setDescription("Window in hours (default 24)").setMinValue(1).setMaxValue(336))
