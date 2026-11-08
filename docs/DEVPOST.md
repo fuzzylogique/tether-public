@@ -9,16 +9,14 @@ Let's Encrypt via sslip.io). The dashboard is up behind her Auth0 tenant; the bo
 (`/health` 502). The public `/demo/<org>` view only exists after a redeploy of current `main`; until then that link redirects to the Auth0 login like the root does. Only her SSH key and Vultr account can reach it: to redeploy, she runs
 `infra/deploy.sh 216.128.176.47 --bot` (after stopping the laptop bot), or adds another public key to the VM.
 
-Still empty on Devpost, all of them need a person:
+Already on Devpost: the story and tagline below, the GitHub link (https://github.com/fuzzylogique/tether-public, a copy of
+this branch without the `refs/entire/checkpoints/*` refs; the working repo stays private), all three teammates, and Gemini
+project number 111270914618 (the "tether" project in AI Studio). Prize tracks ticked: Gemini, Entire, Tiger Data, Vultr, Auth0.
+GoDaddy is unticked: no domain, the VM uses sslip.io.
+
+Still to do on Devpost:
 - **Video demo link** (required) — teammate is producing the video; paste the YouTube/Vimeo URL under Project details.
-- **Public GitHub repository link** (required) — paste https://github.com/fuzzylogique/tether-public. It is a copy of this
-  branch without the `refs/entire/checkpoints/*` refs; the working repo stays private.
-- **"Try it yourself" section below** — new, not on Devpost yet; paste it into the story.
-- **Teammates** — Manage team, invite by Devpost username or email.
-- **Universities** — currently "University of Waterloo" only; add each teammate's school.
-- **Gemini Project Number** — AI Studio → Get API key → Project number. Needed for the Gemini track.
-- **Prize tracks** — Gemini, Entire, Tiger Data, Vultr and Auth0 are ticked (the live dashboard sits behind Auth0
-  Universal Login). GoDaddy is unticked: no domain, the VM uses sslip.io.
+- **Universities** — currently "University of Waterloo" only; add any other teammate's school.
 - **Thumbnail and gallery images** — optional; screenshots of a plan card and the dashboard would help.
 - Then tick the terms box and press **Submit project**. Submitted projects stay editable until the deadline.
 
@@ -27,67 +25,69 @@ The sections below are what was pasted, kept here as the source of truth.
 **Name:** Tether
 
 **Tagline (under 200 characters):**
-The operations team that lives in your hackathon's Discord. Agents plan the work across Sheets, Gmail, Calendar and Instagram, and nothing risky happens until a human approves it.
+Manage your socials, emails and budget all from your group chat. Tether is the extra organizer your event always needed, and it checks with you before doing anything big.
 
 **Links:** Video `<YouTube or Vimeo URL>` · Code https://github.com/fuzzylogique/tether-public · Live dashboard https://216-128-176-47.sslip.io/demo/82c2ea79-d419-4817-854d-5b569b0d349b (public read-only view; the signed-in app behind Auth0 is at the root) · Instagram post https://www.instagram.com/p/DfeOMPijoD-/
 ---
 
 ## Inspiration
 
-Organizers run a whole hackathon out of a Discord server, a Google Sheet, a shared calendar and someone's inbox. The work falls through the gaps between them: a sponsor says yes in an email and nobody logs the money, a task goes overdue and nobody chases it, the recap post never gets written because everyone is busy running the event.
+Running an event is no simple task. Everyone is chatting on Discord while the real work is scattered across a spreadsheet, a shared calendar and somebody's overflowing inbox. A sponsor says yes by email and nobody logs the money. A task quietly goes overdue. The recap post sits on the to-do list until everyone has forgotten what happened.
 
-We did not want a chatbot that answers questions about the event. We wanted something that does the work, in the place organizers already are, without being trusted to spend money or email a sponsor on its own.
+We didn't want one more chatbot that answers questions about the schedule. We wanted a teammate who picks up the boring jobs right there in the group chat, and who still asks before spending your money or emailing your sponsors.
 
 ## What it does
 
-You talk to Tether in Discord. It reads the request, or the last few messages of a conversation, and proposes a plan. A person presses Run, and specialist agents do the work.
+**Manage your socials, emails and budget, all from your group chat.** Tell Tether what's going on in plain English, or point it at the last few messages of your conversation, and it comes back with a plan. Press Run and a small crew of specialist agents gets to work.
 
-- **One message, many systems.** "TigerData just confirmed a $1,000 Bronze sponsorship, kick off onboarding" moves the sponsor to confirmed, and that change fires a standing workflow: the income lands on the finance sheet, the deliverables become tasks, and a welcome post is drafted.
-- **Plans from a conversation.** `/plan from_chat:5` reads what the team just decided and turns it into calendar events you can edit before anyone approves them.
-- **Recaps from real photos.** Drop photos in a channel and ask for a recap. Gemini vision picks the best shots, writes copy that matches them, and the post waits on a card with the gallery attached. Only a lead can publish it to Instagram.
-- **Receipts to the books.** Send a receipt photo and finance extracts the amount and tax, stores a durable copy, and logs the expense. Under $50 runs automatically; over that needs a person.
-- **Nudges that close the loop.** An overdue task gets a nudge. Reply "tomorrow 3pm" and the due date moves. Reply "can't" and the Lead is pinged to reassign it.
-- **Humans stay in charge.** Every step has a card you can edit, approve or reject, and anything running can be stopped with one button. A web dashboard shows the same runs, approvals and goals.
+- **One piece of good news, everything sorted.** Say "TigerData just confirmed a $1,000 Bronze sponsorship, kick off onboarding." Tether marks the sponsor as confirmed, adds the money to your finance sheet, turns the deliverables into tasks and drafts a welcome post.
+- **Your chat becomes your calendar.** Been going back and forth about when to meet? `/plan from_chat:5` reads what you all just decided and turns it into calendar events you can tweak before anything gets added.
+- **Event photos become Instagram posts.** Drop your photos in a channel and ask for a recap. Tether picks the best shots, writes a caption to match, and holds the post until a lead gives it the thumbs up.
+- **Your sponsor inbox, under control.** Tether watches for sponsor replies, flags them in your sponsorship channel, sends a daily inbox digest, and drafts emails for you to approve before anything goes out.
+- **Snap a receipt and the books are done.** Send a photo and Tether reads the amount and tax, saves a copy and logs the expense. Purchases under $50 go straight through, and anything bigger waits for a person.
+- **Friendly nagging, on autopilot.** Overdue tasks get a nudge. Reply "tomorrow 3pm" and the due date moves. Reply "can't" and your lead gets pinged to find someone else.
+- **You're still the boss.** Every step shows up on a card you can edit, approve or reject, and one button stops anything mid-run. A web dashboard shows your goals, approvals and everything the agents have been up to.
 
 ## How we built it
 
-Tether is a TypeScript monorepo. Discord is only an I/O adapter; all the thinking lives in one core package.
+Tether is written in TypeScript. Discord is just the front door, and all the thinking happens in one shared core.
 
-- **Durable agent workflows.** A request becomes an Inngest event. The planner drafts a structured plan with dependencies, the executor runs dependency levels in parallel, and each agent loop survives restarts. Waiting on a human is a durable `waitForEvent`, so an approval can arrive hours later and the agent resumes where it stopped.
-- **One policy gateway.** Every tool declares its effect and risk, and every side-effecting call passes through `policy.decide()`, which returns run, approve or deny. That rule is enforced in code, not in a prompt, so a model cannot talk its way past it.
-- **Gemini** does the planning with structured output, drives six specialist agents with function calling, reads receipts and event photos with vision, classifies nudge replies, summarizes the inbox, and embeds the FAQ.
-- **TigerData Postgres** holds everything. The activity stream is a hypertable with columnstore compression and a continuous aggregate that feeds both the dashboard's agent activity chart and the `/tether status` sparkline in Discord, and the helpdesk fuses pgvector similarity with pg_textsearch BM25 using reciprocal rank fusion.
-- **Vultr Object Storage** keeps durable copies of receipts and recap photos, because Discord attachment links expire, and staging for Instagram publishing.
-- **Next.js dashboard** over the same database, with a plan graph for each run, behind **Auth0** Universal Login: workspace access matches the verified email or Auth0 subject to the team member a lead added from Discord, and an Auth0 roles claim can grant edit rights. It runs on a **Vultr VM** with Docker Compose and Caddy, with Let's Encrypt TLS on an sslip.io hostname. **Entire** recorded our agent sessions, and the commits written with them carry a checkpoint.
+- **Gemini is the brains.** It writes the plans, powers six specialist agents (finance, sponsorship, socials, calendar, coordination and helpdesk), reads receipts and event photos, understands replies like "tomorrow 3pm" and sums up the inbox.
+- **Inngest gives Tether patience.** Every plan is a durable workflow, so an approval can arrive hours later and the agents pick up exactly where they left off, even after a restart.
+- **One rulebook, written in code.** Every action passes through a single policy check that decides whether to run it, ask a person or refuse. It lives in code rather than in a prompt, so no model can sweet-talk its way past it.
+- **TigerData remembers everything.** The agents' activity stream is a compressed hypertable, and a continuous aggregate draws the dashboard's activity chart and the sparkline in `/tether status`. The helpdesk blends pgvector similarity with BM25 keyword search so questions find the right answer.
+- **Vultr keeps the lights on.** A VM runs the dashboard with Docker Compose and Caddy. Object Storage holds receipts and photos, because Discord links expire and Instagram needs somewhere to fetch images from.
+- **Auth0 minds the door.** The dashboard sits behind Universal Login. Access matches the people a lead adds from Discord, and an Auth0 roles claim can grant edit rights.
+- **Entire was our flight recorder.** We built Tether with AI coding agents, and Entire captured those sessions as we went. 57 of our commits link back to the session that wrote them, so we could look up why a change was made as well as what changed. That mattered when several of us were working with agents on the same code over one weekend.
 
 ## Challenges we ran into
 
-- **Models invent things.** In a live run an agent made up a sponsor's email address, and another made up image URLs. We stopped relying on prompts for this: posting tools now reject images that are not from Discord or our own storage, and email tools refuse an address that differs from the contact on file.
-- **Agents asked for approval in prose.** A model would finish with "let me know if you approve" and no card existed, so nothing could ever be approved. Approval now only happens through the card a tool call creates.
-- **Free-tier limits.** At 20 requests a day per key on our main model, one multi-step plan could use half the budget. We added per-model key rotation and a fallback model, and rate-limit waits now show on the status card so a slow run does not look like a hung one.
-- **Failures that looked like thinking.** When the planner died before a plan existed, Discord kept showing "thinking…" forever. Failed drafts now mark the run and explain themselves in the channel, and errors that retrying cannot fix stop immediately.
-- **Our schema tool tried to drop our aggregate.** `drizzle-kit push` issued `DROP VIEW` on the continuous aggregate and still reported success, so we wrote a safer push that refuses to touch protected objects.
+- **AI makes things up.** During one live run, an agent invented a sponsor's email address. Another invented image URLs. Asking nicely didn't fix it, so now email tools refuse any address that doesn't match the contact on file, and posting tools only accept images from Discord or our own storage.
+- **Agents asking permission to no one.** A model would finish with "let me know if you approve" when there was no approval card to press. Now the only way to approve something is the card itself.
+- **Living on free-tier limits.** At 20 requests a day per key, one big plan could eat half our budget. We added key rotation and a backup model, and the status card now tells you when Tether is waiting its turn.
+- **The bot that was "thinking" forever.** When planning crashed early, Discord kept saying "thinking…" until the end of time. Now failures explain themselves in the channel, and errors that retrying can't fix stop right away.
+- **Our database tool tried to delete our chart.** `drizzle-kit push` quietly dropped the view behind our activity chart and still reported success, so we wrote a safer push that won't touch protected objects.
 
 ## Accomplishments that we're proud of
 
-- The demo is real. Every clip is a live run against real Discord, Google Sheets, Calendar and Instagram, and the post linked above was published by Tether after a lead approved it.
-- Reliability work came from actually using it. We ran the flows, wrote down every defect, and fixed the cause rather than the symptom.
-- The approval model holds up: agents do the tedious work, and people still make the decisions that matter.
+- The demo is the real thing. Every clip is a live run against real Discord, Google Sheets, Calendar and Instagram, and [this Instagram post](https://www.instagram.com/p/DfeOMPijoD-/) was published by Tether after a lead approved it.
+- We used it until it broke, wrote down everything that went wrong, and fixed the causes.
+- The balance feels right: the agents do the tedious bits, and people still make the calls that matter.
 
 ## What we learned
 
-Most of our failures were not about the framework. They were about model discipline: what an agent is allowed to believe, and what must be checked in code rather than requested in a prompt. Durable execution also changed the design more than we expected. Once waiting on a human is cheap, you can put a person in front of every risky action without making the product feel slow.
+Most of our bugs came down to trust: what an agent should be allowed to believe, and what has to be checked in code instead of requested in a prompt. We also learned that when waiting for a human costs nothing, you can ask a person before every risky action and the whole thing still feels quick.
 
 ## What's next for Tether
 
-- A real domain in front of the Vultr VM, and Auth0 Token Vault so each organizer connects their own Google account instead of one shared refresh token.
-- An Undo button for executed actions, and an "always allow this" option so trust can grow over time.
-- A participant-facing helpdesk channel answering from the event's own documents.
-- Write-through to the Sheet for sponsors and tasks.
+- A proper domain, and Auth0 Token Vault so each organizer can connect their own Google account.
+- An Undo button, plus "always allow this" so Tether can earn more trust over time.
+- A helpdesk channel where participants get answers straight from the event's own documents.
+- Keeping sponsors and tasks in sync with the Google Sheet too.
 
 ## Try it yourself
 
-Tether is self-hosted, so you can run it on your own Discord server with your own keys. The minimum is a Discord bot, a free Gemini API key and a Tiger Cloud database; Google, Instagram and Auth0 are optional add-ons. `pnpm env:check` tests each credential with a real call and prints the bot's invite link. The full walkthrough is in the [setup guide](https://github.com/fuzzylogique/tether-public/blob/main/docs/SELF_HOSTING.md).
+Want Tether in your own group chat? It's self-hosted, so you run it on your own Discord server with your own keys. All you need to start is a Discord bot, a free Gemini API key and a Tiger Cloud database. Google, Instagram and Auth0 are optional extras. The [setup guide](https://github.com/fuzzylogique/tether-public/blob/main/docs/SELF_HOSTING.md) walks you through it.
 
 ## Built with
 
