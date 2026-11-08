@@ -48,6 +48,7 @@ export default async function Workspaces() {
       ) : (
         <div className="panel p-6 max-w-xl space-y-3 text-sm">
           <p className="font-medium">No workspaces linked to {user?.email || "this account"} yet.</p>
+          {user && !user.emailVerified && <p className="muted">Verify this email with Auth0 first; workspaces only match verified addresses.</p>}
           <p className="muted">In the Discord server for your event, run <code className="tag">/workspace web email:{user?.email || "you@example.com"}</code>. The workspace shows up here once you refresh.</p>
           <p className="muted">Setting up a new event? Invite the bot to its server and run <code className="tag">/tether setup</code> first.</p>
         </div>

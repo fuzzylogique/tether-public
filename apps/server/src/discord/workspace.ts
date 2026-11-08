@@ -1,7 +1,7 @@
 import { PermissionFlagsBits, SlashCommandBuilder, type ChatInputCommandInteraction } from "discord.js";
 import { and, eq } from "drizzle-orm";
 import {
-  INTEGRATIONS, METRICS, daysUntil, db, env, schema, setGoal, setIntegration, workspaceSummary,
+  INTEGRATIONS, METRICS, daysUntil, db, env, integrationStatus, schema, setGoal, setIntegration, workspaceSummary,
   type IntegrationKey, type MetricKey, type Progress,
 } from "@tether/core";
 
@@ -112,9 +112,9 @@ export async function onWorkspaceCommand(i: ChatInputCommandInteraction, org: Or
   }
 
   if (key === "integrations:status") {
-    const s = await workspaceSummary(org);
+    // No workspaceSummary here: it calls Google Calendar, and this reply has to land inside Discord's 3s window.
     const word = { connected: "connected", off: "disconnected", needs_setup: "on, needs setup" } as const;
-    return i.reply({ ephemeral: true, content: s.integrations.map((x) => `• **${x.label}**: ${word[x.status]}\n-# ${x.description}`).join("\n") + `\n-# Toggle these on the web too: ${webUrl}` });
+    return i.reply({ ephemeral: true, content: INTEGRATIONS.map((x) => `• **${x.label}**: ${word[integrationStatus(org, x.key)]}\n-# ${x.description}`).join("\n") + `\n-# Toggle these on the web too: ${webUrl}` });
   }
 
   if (key === "integrations:connect" || key === "integrations:disconnect") {

@@ -11,7 +11,7 @@ type User = NonNullable<Awaited<ReturnType<typeof currentUser>>>;
  */
 async function memberships(user: User) {
   if (!authConfigured) return undefined;
-  const email = user.email.toLowerCase();
+  const email = user.emailVerified ? user.email.toLowerCase() : "";
   const conds = [user.sub ? eq(schema.users.auth0Sub, user.sub) : undefined, email ? sql`lower(${schema.users.email}) = ${email}` : undefined].filter((c) => c !== undefined);
   if (!conds.length) return [];
   return db().select({ orgId: schema.users.orgId, roles: schema.users.roles }).from(schema.users).where(or(...conds));

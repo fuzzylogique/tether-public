@@ -125,6 +125,13 @@ export async function settleAction(input: {
   const tool = getTool(action.tool);
   if (!tool) return { part: fnResult(action.tool, { error: "tool missing" }), executed: false };
 
+  // The integration may have been switched off while the action waited for approval.
+  if (input.approved && !toolAllowed(ctx.org, action.tool)) {
+    const reason = "the workspace disconnected this service while the action was waiting";
+    await ctx.db.update(actions).set({ status: "denied", decidedAt: new Date(), decisionNote: reason, approverDiscordId: ctx.actor.discordId }).where(eq(actions.id, action.id));
+    return { part: fnResult(action.tool, { status: "denied", reason }), executed: false };
+  }
+
   if (!input.approved) {
     await ctx.db.update(actions).set({ status: "rejected", decidedAt: new Date(), decisionNote: input.note, approverDiscordId: ctx.actor.discordId }).where(eq(actions.id, action.id));
     return { part: fnResult(action.tool, { status: "rejected", reason: input.note ?? "rejected by organizer" }), executed: false };
