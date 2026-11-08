@@ -20,7 +20,14 @@ const checks: Check[] = [
         const ext = await sql`select extname from pg_extension`;
         const names = ext.map((r) => r.extname);
         const tables = await sql`select count(*)::int as n from information_schema.tables where table_schema='public'`;
-        return `${String(v!.version).split(" on ")[0]} · extensions: ${["timescaledb", "vector", "vectorscale", "pg_textsearch"].map((x) => `${x}${names.includes(x) ? "✔" : "✘"}`).join(" ")} · ${tables[0]!.n} tables${tables[0]!.n === 0 ? " (run pnpm db:push)" : ""}`;
+        // The Tiger objects tiger.sql creates, so a missing one shows up here instead of as an empty chart.
+        const [ht] = await sql`select num_chunks::int as chunks, compression_enabled as compressed from timescaledb_information.hypertables where hypertable_name = 'events'`.catch(() => []);
+        const jobs = await sql`select proc_name from timescaledb_information.jobs where hypertable_name in ('events', 'agent_activity_hourly') or proc_name = 'policy_refresh_continuous_aggregate'`.catch(() => []);
+        const procs = jobs.map((j) => String(j.proc_name));
+        const tiger = ht
+          ? ` · events hypertable (${ht.chunks} chunk${ht.chunks === 1 ? "" : "s"}, columnstore ${ht.compressed ? "on" : "off"}) · policies: aggregate refresh${procs.includes("policy_refresh_continuous_aggregate") ? "✔" : "✘"} compression${procs.some((p) => p.includes("compression") || p.includes("columnstore")) ? "✔" : "✘"}`
+          : " · events is not a hypertable (run pnpm db:push)";
+        return `${String(v!.version).split(" on ")[0]} · extensions: ${["timescaledb", "vector", "vectorscale", "pg_textsearch"].map((x) => `${x}${names.includes(x) ? "✔" : "✘"}`).join(" ")} · ${tables[0]!.n} tables${tables[0]!.n === 0 ? " (run pnpm db:push)" : ""}${tiger}`;
       } finally { await sql.end(); }
     },
   },
@@ -103,7 +110,7 @@ const checks: Check[] = [
   {
     name: "Auth0",
     async run() {
-      if (!e.AUTH0_DOMAIN) return "not configured → dashboard runs in dev mode without login";
+      if (!e.AUTH0_DOMAIN) return "not configured → dashboard runs in dev mode without login (docs/AUTH0.md)";
       const r = await fetch(`https://${e.AUTH0_DOMAIN}/.well-known/openid-configuration`);
       if (!r.ok) throw new Error(`tenant not reachable (${r.status})`);
       return `tenant ${e.AUTH0_DOMAIN} reachable${e.AUTH0_SECRET ? "" : " · AUTH0_SECRET empty (openssl rand -hex 32)"}`;

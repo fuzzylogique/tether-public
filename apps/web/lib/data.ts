@@ -14,7 +14,13 @@ async function memberships(user: User) {
   const email = user.emailVerified ? user.email.toLowerCase() : "";
   const conds = [user.sub ? eq(schema.users.auth0Sub, user.sub) : undefined, email ? sql`lower(${schema.users.email}) = ${email}` : undefined].filter((c) => c !== undefined);
   if (!conds.length) return [];
-  return db().select({ orgId: schema.users.orgId, roles: schema.users.roles }).from(schema.users).where(or(...conds));
+  const rows = await db().select({ id: schema.users.id, orgId: schema.users.orgId, roles: schema.users.roles, auth0Sub: schema.users.auth0Sub })
+    .from(schema.users).where(or(...conds));
+  // First sign-in binds the Auth0 subject to the row `/workspace web` created by email, so later logins match on
+  // the stable subject even if the person changes their email at the identity provider.
+  const unbound = rows.filter((r) => !r.auth0Sub && user.sub && email);
+  if (unbound.length) await db().update(schema.users).set({ auth0Sub: user.sub }).where(inArray(schema.users.id, unbound.map((r) => r.id)));
+  return rows;
 }
 
 export async function workspacesFor(user: User) {
@@ -43,7 +49,9 @@ export async function workspaceFor(user: User, orgId: string) {
   if (!m) return { org, canEdit: true };
   const rows = m.filter((r) => r.orgId === orgId);
   if (!rows.length) return undefined;
-  return { org, canEdit: rows.some((r) => hasRole(r.roles, "organizer")) };
+  // Edit rights come from the workspace's own roles or from the Auth0 roles claim (an organizer or lead role
+  // assigned in the Auth0 tenant), so a team can manage access entirely from Auth0 if it prefers.
+  return { org, canEdit: rows.some((r) => hasRole(r.roles, "organizer")) || hasRole(user.roles, "organizer") };
 }
 
 export async function runDetail(runId: string) {
