@@ -2,6 +2,7 @@ import { z } from "zod";
 import { and, eq, ilike } from "drizzle-orm";
 import { defineTool } from "./types.js";
 import { tasks } from "../db/schema.js";
+import { setGoal } from "../workspace.js";
 
 export const listTasks = defineTool({
   name: "list_tasks",
@@ -104,4 +105,21 @@ export const escalate = defineTool({
   },
 });
 
-export const coordinationTools = [listTasks, createTask, updateTask, nudgeOwner, escalate];
+export const recordMetric = defineTool({
+  name: "record_metric",
+  description: "Record a headcount for the workspace overview (registrations, volunteers, mentors, judges) after reading it from a sheet, an email or the chat. Always say where the number came from.",
+  input: z.object({
+    metric: z.enum(["registrations", "volunteers", "mentors", "judges"]),
+    current: z.number().int().min(0).optional().describe("How many there are now"),
+    target: z.number().int().min(0).optional().describe("How many the event needs, only when the organizer stated it"),
+    source: z.string().min(3).max(120).describe("Where the number came from, e.g. 'Registrations sheet, row count' or 'Devpost export'"),
+  }),
+  effect: "write", risk: "low",
+  summarize: (a) => `Record ${a.metric}: ${a.current ?? "?"}${a.target !== undefined ? ` of ${a.target}` : ""} (${a.source})`,
+  async execute(args, ctx) {
+    if (args.current === undefined && args.target === undefined) return { error: "give current, target, or both" };
+    return setGoal(ctx.org.id, args.metric, { current: args.current, target: args.target, source: args.source });
+  },
+});
+
+export const coordinationTools = [listTasks, createTask, updateTask, nudgeOwner, escalate, recordMetric];

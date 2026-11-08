@@ -1,22 +1,25 @@
 @import "tailwindcss";
 
 /*
- * Direction: a printed event run sheet. Warm paper, ink type, ruled lines,
- * square corners, one signal-orange accent, ledger-style mono numbers.
- * Status colors are functional only (ok / waiting / failed), muted to sit on paper.
+ * Direction: an organizer's run sheet in Tether's own colours. Cool, faintly violet paper, ink type,
+ * ruled lines, square corners (the bot avatar is square), one accent: the Tether purple from
+ * packages/core/src/ui/tokens.ts. Status colours are the Discord card colours, darkened where they
+ * carry text so they pass contrast on paper.
  */
 :root {
-  --paper: #f3efe6;
-  --sheet: #faf8f2;
-  --sheet-2: #ece6d9;
-  --rule: #d6cebd;
-  --rule-strong: #1d1c1a;
-  --ink: #1d1c1a;
-  --muted: #6b665c;
-  --accent: #c2410c;
-  --ok: #2f6b4b;
-  --wait: #9a5b06;
-  --fail: #b42318;
+  --paper: #f4f3f8;
+  --sheet: #fbfbfd;
+  --sheet-2: #ebe9f3;
+  --rule: #d9d6e4;
+  --rule-strong: #1c1b24;
+  --ink: #1c1b24;
+  --muted: #625f72;
+  --brand: #6d5df6;       /* TETHER: fills, marks, bars */
+  --accent: #5143d9;      /* brand darkened for text and focus rings (AA on --sheet) */
+  --brand-tint: #e9e6fd;
+  --ok: #157a5a;          /* GREEN #1D9E75, text weight */
+  --wait: #a2600a;        /* AMBER #EF9F27, text weight */
+  --fail: #c13534;        /* RED #E24B4A, text weight */
   --radius: 2px;
 }
 
@@ -98,6 +101,20 @@ body {
 }
 .btn-primary { background: var(--ink); color: var(--sheet); }
 .btn-primary:hover { background: #000; }
+
+/* The six agent colours as flat segments, as on the bot banner. */
+.ribbon { display: grid; grid-template-columns: repeat(6, 1fr); height: 4px; }
+
+.switch { width: 34px; height: 18px; border: 1px solid var(--rule); background: var(--sheet-2); position: relative; border-radius: var(--radius); flex-shrink: 0; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: var(--muted); border-radius: 1px; transition: transform 120ms ease; }
+.switch[aria-checked="true"] { background: var(--brand); border-color: var(--brand); }
+.switch[aria-checked="true"]::after { background: var(--sheet); transform: translateX(16px); }
+.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch:disabled { opacity: 0.5; }
+@media (prefers-reduced-motion: reduce) { .switch::after { transition: none; } }
+
+.ws-card:hover { border-color: var(--ink); }
+.ws-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .btn-danger { background: transparent; color: var(--fail); border-color: var(--fail); }
 .btn-danger:hover { background: var(--fail); color: var(--sheet); }
 

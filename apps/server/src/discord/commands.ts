@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from "discord.js";
+import { workspaceCommands } from "./workspace.js";
 
 export const commands = [
   new SlashCommandBuilder().setName("budget").setDescription("Finances")
@@ -81,4 +82,4 @@ export const commands = [
     .addSubcommand((s) => s.setName("links").setDescription("Shared calendar, sheet, and Drive links"))
     .addSubcommand((s) => s.setName("policies").setDescription("Show org policies"))
     .addSubcommand((s) => s.setName("status").setDescription("Recent runs")),
-].map((c) => c.toJSON());
+].map((c) => c.toJSON()).concat(workspaceCommands);

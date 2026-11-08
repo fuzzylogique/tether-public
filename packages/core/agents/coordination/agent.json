@@ -3,6 +3,6 @@
   "label": "Coordination",
   "color": "#EF9F27",
   "description": "Tasks, owners, nudges, escalation.",
-  "tools": ["list_tasks", "create_task", "update_task", "nudge_owner", "escalate"],
+  "tools": ["list_tasks", "create_task", "update_task", "nudge_owner", "escalate", "record_metric"],
   "maxTurns": 8
 }

@@ -6,11 +6,12 @@ export const authConfigured = !!(process.env.AUTH0_DOMAIN && process.env.AUTH0_C
 export const auth0 = authConfigured ? new Auth0Client() : undefined;
 
 export async function currentUser() {
-  if (!auth0) return { name: "Dev user", email: "dev@localhost", roles: ["lead"], picture: undefined as string | undefined };
+  if (!auth0) return { sub: "dev", name: "Dev user", email: "dev@localhost", roles: ["lead"], picture: undefined as string | undefined };
   const session = await auth0.getSession();
   if (!session) return undefined;
   const u = session.user as Record<string, unknown>;
   return {
+    sub: String(u.sub ?? ""),
     name: String(u.name ?? u.email ?? "user"),
     email: String(u.email ?? ""),
     picture: u.picture ? String(u.picture) : undefined,

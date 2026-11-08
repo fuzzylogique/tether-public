@@ -18,4 +18,10 @@ export { inngest, isInngestDev, type Events, type Source, type Attachment } from
 export { createTetherFunctions } from "./inngest/functions/index.js";
 export { generateText, generateStructured, embed } from "./runtime/gemini.js";
 export * from "./ui/index.js";
+export {
+  INTEGRATIONS, integrationKeys, integrationEnabled, integrationStatus, toolAllowed, maskOrg, setIntegration,
+  METRICS, PEOPLE_METRICS, setGoal, workspaceSummary, daysUntil, todayBounds,
+  type IntegrationStatus, type WorkspaceSummary, type Progress,
+} from "./workspace.js";
+export type { IntegrationKey, MetricKey, WorkspaceGoals, GoalEntry } from "./db/schema.js";
 export { dashboardRunUrl, approvalCardFor, approvalContext, actionRef, settledDecision } from "./runtime/cards.js";

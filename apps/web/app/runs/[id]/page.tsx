@@ -1,19 +1,24 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { agents } from "@tether/core";
-import { runDetail } from "@/lib/data";
+import { runDetail, workspaceFor } from "@/lib/data";
+import { currentUser } from "@/lib/auth0";
 import { AgentName, Card, StatusPill, rel } from "@/components/ui";
 import { PlanGraph } from "@/components/plan-graph";
 
 export default async function RunPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const d = await runDetail(id);
   if (!d) notFound();
+  const user = await currentUser();
+  const ws = user ? await workspaceFor(user, d.run.orgId) : undefined;
+  if (!ws) notFound();
   const colors = Object.fromEntries(Object.values(agents()).map((a) => [a.name, a.color]));
   const stepStatus = Object.fromEntries(d.steps.map((s) => [s.stepKey, s.status]));
   return (
     <div className="space-y-6">
-      <Link href="/runs" className="label hover:text-[var(--ink)]">Runs /</Link>
+      <Link href={`/w/${ws.org.id}`} className="label hover:text-[var(--ink)]">{ws.org.name} /</Link>
       <div className="flex items-start justify-between gap-6">
         <div>
           <h1 className="font-display text-2xl font-semibold">{d.run.request}</h1>

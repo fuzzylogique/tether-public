@@ -39,7 +39,7 @@ export function StatStrip({ items }: { items: { label: string; value: string; su
 const statusColor: Record<string, string> = {
   done: "var(--ok)", executed: "var(--ok)", approved: "var(--ok)", confirmed: "var(--ok)", low: "var(--ok)",
   running: "var(--wait)", awaiting_approval: "var(--wait)", pending: "var(--wait)", negotiating: "var(--wait)", medium: "var(--wait)",
-  proposed: "var(--accent)",
+  proposed: "var(--accent)", connected: "var(--ok)",
   failed: "var(--fail)", rejected: "var(--fail)", denied: "var(--fail)", high: "var(--fail)",
   cancelled: "var(--muted)", expired: "var(--muted)",
 };
@@ -57,10 +57,11 @@ export function AgentName({ name, color }: { name: string; color?: string }) {
   );
 }
 
-export function Bar({ pct }: { pct: number }) {
-  const color = pct > 95 ? "var(--fail)" : pct > 80 ? "var(--wait)" : "var(--ink)";
+/** Progress toward a goal. `spend` bars warn as they near the limit; goal bars just fill in brand purple. */
+export function Bar({ pct, spend = false }: { pct: number; spend?: boolean }) {
+  const color = spend && pct > 95 ? "var(--fail)" : spend && pct > 80 ? "var(--wait)" : "var(--brand)";
   return (
-    <div className="h-1.5" style={{ background: "var(--sheet-2)" }}>
+    <div className="h-1.5" style={{ background: "var(--sheet-2)" }} role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
       <div className="h-full" style={{ width: `${Math.min(100, pct)}%`, background: color }} />
     </div>
   );

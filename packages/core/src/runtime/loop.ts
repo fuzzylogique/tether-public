@@ -4,6 +4,7 @@ import { env } from "../env.js";
 import type { AgentDef } from "../agents/registry.js";
 import type { ToolCtx } from "../tools/types.js";
 import { decide } from "../policy/engine.js";
+import { toolAllowed } from "../workspace.js";
 import { actions, events } from "../db/schema.js";
 import { postActivity } from "./feed.js";
 
@@ -43,7 +44,9 @@ export async function runAgentLoop(input: {
 }): Promise<LoopOutcome> {
   const { agent, ctx, step } = input;
   const messages = [...input.messages];
-  const declarations = agent.toolDefs.map(toFunctionDeclaration);
+  // Tools of an integration the workspace switched off are not offered, and a call to one is treated as unknown.
+  const toolDefs = agent.toolDefs.filter((t) => toolAllowed(ctx.org, t.name));
+  const declarations = toolDefs.map(toFunctionDeclaration);
   const system = `${PROTECTED_PREAMBLE}\n\nOrganization: ${ctx.org.name}\nActor: ${ctx.actor.name ?? ctx.actor.discordId ?? "unknown"} (roles: ${ctx.actor.roles.join(", ")})\nNow: ${new Date().toISOString()}\n\n${agent.prompt}`;
 
   for (let turn = input.turnOffset ?? 0; turn < agent.maxTurns; turn++) {
@@ -66,7 +69,7 @@ export async function runAgentLoop(input: {
     const gated: string[] = [];
 
     for (const [i, call] of calls.entries()) {
-      const tool = agent.toolDefs.find((t) => t.name === call.name);
+      const tool = toolDefs.find((t) => t.name === call.name);
       if (!tool) { results.push(fnResult(call.name ?? "unknown", { error: `unknown tool ${call.name}` }, call.id)); continue; }
       const parsed = tool.input.safeParse(call.args ?? {});
       if (!parsed.success) { results.push(fnResult(tool.name, { error: "invalid arguments", issues: parsed.error.issues }, call.id)); continue; }

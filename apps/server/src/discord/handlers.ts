@@ -5,7 +5,7 @@ import {
 } from "discord.js";
 import { and, desc, eq, gt, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import {
-  WORKFLOWS, agentNames, agents, approvalCardFor, budgetCard, buildInboxDigest, buildToolCtx, calendarCard, dashboardRunUrl, db, digestCard, getTool, inngest, loadActor,
+  WORKFLOWS, agentNames, integrationEnabled, toolAllowed, agents, approvalCardFor, budgetCard, buildInboxDigest, buildToolCtx, calendarCard, dashboardRunUrl, db, digestCard, getTool, inngest, loadActor,
   loadOrgByGuild, planCard, schema, sponsorsCard, tasksCard, teamChannelFor, workflowNames,
   type ApprovalDecision, type BudgetExtras, type BudgetRow, type EventRow, type Plan, type PlanDecision, type SponsorRow, type TaskRow,
 } from "@tether/core";
@@ -13,6 +13,7 @@ import { planEmbed, resultEmbed } from "./embeds.js";
 import { planComponents } from "./notifier.js";
 import { render, renderEdit } from "./ui/render.js";
 import { linksText, provisionTeamChannels } from "./teams.js";
+import { WORKSPACE_COMMANDS, onWorkspaceCommand } from "./workspace.js";
 
 type Org = typeof schema.orgs.$inferSelect;
 
@@ -60,6 +61,7 @@ async function channelTranscript(i: ChatInputCommandInteraction, n: number, befo
 async function runToolDirect(org: Org, i: ChatInputCommandInteraction, toolName: string, args: Record<string, unknown>) {
   const tool = getTool(toolName);
   if (!tool || tool.effect !== "read") throw new Error(`tool ${toolName} is not a direct read tool`);
+  if (!toolAllowed(org, toolName)) return { error: "That service is disconnected for this workspace. `/integrations connect` turns it back on." };
   const actor = await loadActor(org.id, i.user.id, i.user.displayName);
   const ctx = await buildToolCtx({ orgId: org.id, actor, runId: "00000000-0000-0000-0000-000000000000", agent: "direct", notify: undefined as never });
   return tool.execute(tool.input.parse(args), ctx);
@@ -95,6 +97,7 @@ async function onCommand(i: ChatInputCommandInteraction) {
   const org = await requireOrg(i);
   if (i.commandName === "tether") return onTether(i, org);
   if (!org) return;
+  if (WORKSPACE_COMMANDS.has(i.commandName)) return onWorkspaceCommand(i, org);
   const sub = i.options.getSubcommand(false);
   await i.deferReply();
 
@@ -166,6 +169,7 @@ async function onCommand(i: ChatInputCommandInteraction) {
       return emitRequest(org, i, { mode: "auto", text, context: `Chat transcript from ${channelName}, oldest first:\n${transcript}` });
     }
     case "digest:": {
+      if (!integrationEnabled(org, "gmail")) return i.editReply("Gmail is disconnected for this workspace. `/integrations connect service:Gmail` turns it back on.");
       const hours = i.options.getInteger("hours") ?? 24;
       const digest = await buildInboxDigest({ hours, query: i.options.getString("query") ?? undefined }).catch((e: Error) => e);
       if (digest instanceof Error) return i.editReply(`Could not read the inbox: ${digest.message.slice(0, 300)}`);
