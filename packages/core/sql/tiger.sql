@@ -1,4 +1,6 @@
--- Tiger Cloud (TimescaleDB) specific setup. Applied after `drizzle-kit push`.
+-- Tiger Cloud (TimescaleDB) specific setup. Applied by `pnpm db:push` after src/db/push.ts (the extension
+-- block first, the rest after). Everything here is idempotent. Objects created here are also declared in
+-- src/db/schema.ts (`.existing()` view / indexes) so drizzle-kit never tries to drop them; see docs/ARCHITECTURE.md.
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;
