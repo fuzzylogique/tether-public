@@ -13,7 +13,9 @@ import { storageConfigured } from "../storage.js";
 
 if (!instagramConfigured()) { console.error("Set INSTAGRAM_ACCESS_TOKEN in .env first."); process.exit(1); }
 
-if (process.argv.includes("--refresh")) {
+if (process.argv.includes("--refresh") && env().INSTAGRAM_ACCESS_TOKEN.startsWith("EAA")) {
+  console.log("system-user token: it does not expire, nothing to refresh");
+} else if (process.argv.includes("--refresh")) {
   const res = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${env().INSTAGRAM_ACCESS_TOKEN}`);
   const body = await res.json() as { access_token?: string; expires_in?: number; error?: { message: string } };
   if (!body.access_token) { console.error("refresh failed:", body.error?.message ?? res.status); process.exit(1); }

@@ -3,14 +3,17 @@ import { env } from "./env.js";
 import { uploadObject } from "./storage.js";
 
 /**
- * Instagram API with Instagram Login (graph.instagram.com). Publishing is a two-step container flow:
+ * Instagram Graph API. Two token kinds work: an Instagram Login token (IGAA…, graph.instagram.com, `/me` is the
+ * account) or a Unified/Facebook Login system-user token (EAA…, graph.facebook.com, account id in INSTAGRAM_USER_ID).
+ * Publishing is a two-step container flow:
  * create a media container per image (plus a CAROUSEL container for several), wait for FINISHED, then publish.
  * Instagram fetches the images itself, so they must sit at public URLs (our Object Storage bucket).
  */
 
 export type InstagramAccount = { userId: string; username: string; accountType?: string };
 
-const base = () => `https://graph.instagram.com/${env().INSTAGRAM_GRAPH_VERSION}`;
+const facebookToken = () => env().INSTAGRAM_ACCESS_TOKEN.startsWith("EAA");
+const base = () => `https://graph.${facebookToken() ? "facebook" : "instagram"}.com/${env().INSTAGRAM_GRAPH_VERSION}`;
 
 export function instagramConfigured(): boolean {
   return Boolean(env().INSTAGRAM_ACCESS_TOKEN);
@@ -28,7 +31,12 @@ async function call<T>(method: "GET" | "POST", path: string, params: Record<stri
 
 let _account: InstagramAccount | undefined;
 export async function instagramAccount(): Promise<InstagramAccount> {
-  if (!_account) {
+  if (!_account && facebookToken()) {
+    const id = env().INSTAGRAM_USER_ID;
+    if (!id) throw new Error("INSTAGRAM_USER_ID is required with a Facebook Login (EAA…) token");
+    const ig = await call<{ id: string; username: string }>("GET", `/${id}`, { fields: "id,username" });
+    _account = { userId: ig.id, username: ig.username, accountType: "BUSINESS" }; // only professional accounts reach this API
+  } else if (!_account) {
     const me = await call<{ user_id: string; username: string; account_type?: string }>("GET", "/me", { fields: "user_id,username,account_type" });
     _account = { userId: me.user_id, username: me.username, accountType: me.account_type };
   }

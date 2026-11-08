@@ -30,6 +30,7 @@ const schema = z.object({
   GOOGLE_REFRESH_TOKEN: z.string().default(""),
   // Instagram API with Instagram Login: a long-lived token for the org's professional account (60 days).
   INSTAGRAM_ACCESS_TOKEN: z.string().default(""),
+  INSTAGRAM_USER_ID: z.string().default(""),
   INSTAGRAM_GRAPH_VERSION: z.string().default("v24.0"),
   SERVER_PORT: z.coerce.number().default(3001),
   SERVER_PUBLIC_URL: z.string().default("http://localhost:3001"),
