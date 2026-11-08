@@ -62,7 +62,10 @@ function build(notifier: Notifier) {
       // Invoked after a Stop landed (see run-plan's check): do nothing, the row already says so.
       if (run.status === "cancelled") return { status: "failed" as const, output: "Stopped before this step started", finishedAt: new Date().toISOString() };
       const actor = await step.run("load-actor", () => loadActor(run.orgId, d.actorDiscordId, d.actorName));
-      const ctx = await buildToolCtx({ orgId: run.orgId, actor, runId: d.runId, stepId: d.stepId, agent: d.agent, notify: notifier, attachments: d.attachments });
+      const ctx = await buildToolCtx({
+        orgId: run.orgId, actor, runId: d.runId, stepId: d.stepId, agent: d.agent, notify: notifier, attachments: d.attachments,
+        renderChannelId: run.source.threadId ?? run.source.channelId,
+      });
       const runRef = { id: run.id, orgId: run.orgId, source: run.source, request: run.request };
       // Approval cards go to the channel of the team that owns the decision (a finance step's card
       // in #finance, even when the plan runs in #sponsorship), unless the run lives in a thread.

@@ -52,6 +52,8 @@ export async function runAgentLoop(input: {
 
   for (let turn = input.turnOffset ?? 0; turn < agent.maxTurns; turn++) {
     const res = await step(`${agent.name}:llm:${turn}`, async () => {
+      // "Tether is typing…" where the run renders, for the ten seconds a model turn roughly takes (docs/GUIDE.md §5.4).
+      if (ctx.renderChannelId) void ctx.notify?.typing({ channelId: ctx.renderChannelId }).catch(() => undefined);
       const r = await generateWithRetry({
         model: env().GEMINI_MODEL_AGENT,
         contents: messages,
