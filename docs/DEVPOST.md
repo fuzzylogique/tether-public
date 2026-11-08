@@ -4,6 +4,11 @@
 Edit it at https://devpost.com/submit-to/31951-hacktrent-2026/manage/submissions/1285537-tether/project-overview
 (public preview: https://devpost.com/software/tether-yzqh3o). Deadline on the hackathon page: **Nov 8, 2026 @ 11:00am EST**.
 
+**Live deployment (Maira, Nov 7 evening):** https://216-128-176-47.sslip.io on a Vultr VM (2 GB, Docker Compose + Caddy,
+Let's Encrypt via sslip.io). The dashboard is up behind her Auth0 tenant; the bot container was down on Nov 8 morning
+(`/health` 502). Only her SSH key and Vultr account can reach it: to redeploy current `main`, she runs
+`infra/deploy.sh 216.128.176.47 --bot` (after stopping the laptop bot), or adds another public key to the VM.
+
 Still empty on Devpost, all of them need a person:
 - **Video demo link** (required) — teammate is producing the video; paste the YouTube/Vimeo URL under Project details.
 - **Public GitHub repository link** (required) — the repo is private and its Entire checkpoint refs hold session transcripts
@@ -11,8 +16,8 @@ Still empty on Devpost, all of them need a person:
 - **Teammates** — Manage team, invite by Devpost username or email.
 - **Universities** — currently "University of Waterloo" only; add each teammate's school.
 - **Gemini Project Number** — AI Studio → Get API key → Project number. Needed for the Gemini track.
-- **Prize tracks** — Gemini, Entire, Tiger Data and Vultr are ticked. Auth0 is wired but not configured and GoDaddy has
-  no domain, so both are left unticked; tick them only if that changes before the deadline.
+- **Prize tracks** — Gemini, Entire, Tiger Data, Vultr and Auth0 are ticked (the live dashboard sits behind Auth0
+  Universal Login). GoDaddy is unticked: no domain, the VM uses sslip.io.
 - **Thumbnail and gallery images** — optional; screenshots of a plan card and the dashboard would help.
 - Then tick the terms box and press **Submit project**. Submitted projects stay editable until the deadline.
 
@@ -23,7 +28,7 @@ The sections below are what was pasted, kept here as the source of truth.
 **Tagline (under 200 characters):**
 The operations team that lives in your hackathon's Discord. Agents plan the work across Sheets, Gmail, Calendar and Instagram, and nothing risky happens until a human approves it.
 
-**Links:** Video `<YouTube or Vimeo URL>` · Code `<GitHub URL, the repo is private today>` · Instagram post https://www.instagram.com/p/DfeOMPijoD-/
+**Links:** Video `<YouTube or Vimeo URL>` · Code `<GitHub URL, the repo is private today>` · Live dashboard https://216-128-176-47.sslip.io (Auth0 login) · Instagram post https://www.instagram.com/p/DfeOMPijoD-/
 ---
 
 ## Inspiration
@@ -52,7 +57,7 @@ Tether is a TypeScript monorepo. Discord is only an I/O adapter; all the thinkin
 - **Gemini** does the planning with structured output, drives six specialist agents with function calling, reads receipts and event photos with vision, classifies nudge replies, summarizes the inbox, and embeds the FAQ.
 - **TigerData Postgres** holds everything. The activity stream is a hypertable with columnstore compression and a continuous aggregate that feeds both the dashboard's agent activity chart and the `/tether status` sparkline in Discord, and the helpdesk fuses pgvector similarity with pg_textsearch BM25 using reciprocal rank fusion.
 - **Vultr Object Storage** keeps durable copies of receipts and recap photos, because Discord attachment links expire, and staging for Instagram publishing.
-- **Next.js dashboard** over the same database, with a plan graph for each run. **Entire** recorded our agent sessions, and the commits written with them carry a checkpoint.
+- **Next.js dashboard** over the same database, with a plan graph for each run, behind **Auth0** Universal Login: workspace access matches the verified email or Auth0 subject to the team member a lead added from Discord, and an Auth0 roles claim can grant edit rights. It runs on a **Vultr VM** with Docker Compose and Caddy, with Let's Encrypt TLS on an sslip.io hostname. **Entire** recorded our agent sessions, and the commits written with them carry a checkpoint.
 
 ## Challenges we ran into
 
@@ -74,7 +79,7 @@ Most of our failures were not about the framework. They were about model discipl
 
 ## What's next for Tether
 
-- Deploy the bot and dashboard to a Vultr VM behind a real domain, with Auth0 login in front of the dashboard.
+- A real domain in front of the Vultr VM, and Auth0 Token Vault so each organizer connects their own Google account instead of one shared refresh token.
 - An Undo button for executed actions, and an "always allow this" option so trust can grow over time.
 - A participant-facing helpdesk channel answering from the event's own documents.
 - Write-through to the Sheet for sponsors and tasks.
