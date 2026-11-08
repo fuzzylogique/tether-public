@@ -146,7 +146,9 @@ export async function acceptDriveInvite(input: { inviteId: string; discordId: st
 
   const [u] = await d.select().from(users).where(and(eq(users.orgId, orgId), eq(users.discordId, input.discordId)));
   if (u) await d.update(users).set({ email: email.data, name: u.name ?? input.name }).where(eq(users.id, u.id));
-  else await d.insert(users).values({ orgId, discordId: input.discordId, name: input.name, email: email.data });
+  // A new person's role follows the access the lead approved: edit access is organizer-level trust, view access is not.
+  // The column default ("organizer") would otherwise give a view-only guest web settings and approval rights.
+  else await d.insert(users).values({ orgId, discordId: input.discordId, name: input.name, email: email.data, roles: [invite.access === "writer" ? "organizer" : "volunteer"] });
 
   try {
     await shareDriveFile(invite.folderId, email.data, invite.access, `${org.name} team files, shared by Tether.`);
