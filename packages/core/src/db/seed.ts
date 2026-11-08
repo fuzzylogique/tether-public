@@ -46,6 +46,8 @@ await d.insert(expenses).values([
   { orgId: org!.id, category: "Marketing", amount: "140.00", tax: "16.11", vendor: "Meta Ads", description: "Launch promo", date: "2026-10-20" },
 ]);
 
+// income.sponsor_id references sponsors, so income has to go first.
+await d.delete(income).where(eq(income.orgId, org!.id));
 await d.delete(sponsors).where(eq(sponsors.orgId, org!.id));
 const seededSponsors = await d.insert(sponsors).values([
   { orgId: org!.id, name: "Shopify", contactName: "Priya N.", contactEmail: sponsorEmail ?? "priya@example.com", stage: "negotiating", amount: "2000.00", tier: "Gold", lastContactAt: new Date(Date.now() - 6 * 86400_000), deliverables: [] },
@@ -55,7 +57,6 @@ const seededSponsors = await d.insert(sponsors).values([
 ]).returning();
 
 // Money in so far: the confirmed sponsor has paid, plus the student union grant. Shopify is still negotiating, so nothing is logged for them.
-await d.delete(income).where(eq(income.orgId, org!.id));
 await d.insert(income).values([
   { orgId: org!.id, source: "Trent Student Union grant", amount: "2500.00", status: "received", date: "2026-10-15", notes: "Annual club allocation" },
   { orgId: org!.id, source: "Vultr sponsorship (Silver)", sponsorId: seededSponsors.find((x) => x.name === "Vultr")?.id, amount: "1500.00", status: "received", date: "2026-10-28" },
