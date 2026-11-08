@@ -84,7 +84,7 @@ export async function runAgentLoop(input: {
         const action = await step(`${agent.name}:action:${turn}:${i}`, async () => {
           const [row] = await ctx.db.insert(actions).values({
             orgId: ctx.org.id, runId: ctx.runId, stepId: ctx.stepId, agent: agent.name, tool: tool.name, args,
-            summary: tool.summarize(args), effect: tool.effect, risk: tool.risk,
+            summary: tool.summarize(args), effect: tool.effect, risk: tool.risk, approverRole: decision.approverRole,
           }).returning();
           await ctx.db.insert(events).values({ orgId: ctx.org.id, runId: ctx.runId, kind: "policy_decision", agent: agent.name, data: { tool: tool.name, decision: "approve", actionId: row!.id } });
           return row!;

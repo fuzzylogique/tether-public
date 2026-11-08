@@ -68,6 +68,7 @@ export const nudgeOwner = defineTool({
   description: "Nudge a task owner about an overdue or upcoming task. Posted in the team #tasks channel with an @mention (or a DM when there is no #tasks channel). The owner can answer the message with an ETA, 'done' or 'can't'; Tether reads the reply.",
   input: z.object({ discordId: z.string(), message: z.string(), taskTitle: z.string().optional() }),
   effect: "external", risk: "medium",
+  editFields: [{ key: "message", label: "Message", style: "paragraph", required: true }],
   summarize: (a) => `Nudge <@${a.discordId}>: ${a.message.slice(0, 80)}`,
   async execute(args, ctx) {
     const channelId = ctx.org.channels["tasks"];
@@ -87,6 +88,7 @@ export const escalate = defineTool({
   description: "Post an escalation to the ops channel mentioning the lead role. Use after nudges went unanswered or when the owner says they cannot do it.",
   input: z.object({ message: z.string(), taskTitle: z.string().optional() }),
   effect: "external", risk: "medium",
+  editFields: [{ key: "message", label: "Message", style: "paragraph", required: true }],
   summarize: (a) => `Escalate: ${a.message.slice(0, 80)}`,
   async execute(args, ctx) {
     const channelId = ctx.org.channels["ops"];

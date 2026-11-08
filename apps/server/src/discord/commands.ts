@@ -33,12 +33,14 @@ export const commands = [
     .addSubcommand((s) => s.setName("draft").setDescription("Draft a post with image")
       .addStringOption((o) => o.setName("brief").setDescription("What the post is about").setRequired(true))
       .addStringOption((o) => o.setName("platform").setDescription("Platform").addChoices(
-        { name: "instagram", value: "instagram" }, { name: "linkedin", value: "linkedin" }, { name: "twitter", value: "twitter" }, { name: "discord", value: "discord" })))
+        { name: "instagram", value: "instagram" }, { name: "linkedin", value: "linkedin" }, { name: "twitter", value: "twitter" }, { name: "discord", value: "discord" }))
+      .addBooleanOption((o) => o.setName("instagram").setDescription("Also publish to the org's Instagram account (asks a lead first)")))
     .addSubcommand((s) => s.setName("recap").setDescription("Recap post from the photos in #photos")
       .addStringOption((o) => o.setName("brief").setDescription("What to recap, e.g. 'Day 1: opening ceremony and late-night hacking'"))
       .addIntegerOption((o) => o.setName("photos").setDescription("How many photos (1-8, default 4)").setMinValue(1).setMaxValue(8))
       .addStringOption((o) => o.setName("platform").setDescription("Platform").addChoices(
-        { name: "instagram", value: "instagram" }, { name: "linkedin", value: "linkedin" }, { name: "twitter", value: "twitter" }, { name: "discord", value: "discord" }))),
+        { name: "instagram", value: "instagram" }, { name: "linkedin", value: "linkedin" }, { name: "twitter", value: "twitter" }, { name: "discord", value: "discord" }))
+      .addBooleanOption((o) => o.setName("instagram").setDescription("Also publish to the org's Instagram account (asks a lead first)"))),
 
   new SlashCommandBuilder().setName("plan").setDescription("Multi-step request: Tether proposes a plan you approve")
     .addStringOption((o) => o.setName("request").setDescription("What needs to happen (optional when reading the chat)"))

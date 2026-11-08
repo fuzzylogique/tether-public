@@ -1,43 +1,66 @@
 import { STATUS_COLORS, TETHER, statusEmoji } from "../tokens.js";
-import { quote, stepSquares, shortId, text, truncate, ts, type Card } from "../card.js";
+import { quote, stepSquares, shortId, text, truncate, ts, type Action, type Card } from "../card.js";
 import { agentMeta } from "./agent.js";
 
 export type StepState = {
   id: string;
   agent: string;
   instruction: string;
-  status: "pending" | "running" | "awaiting_approval" | "done" | "failed" | "skipped";
+  status: "pending" | "running" | "awaiting_approval" | "done" | "failed" | "skipped" | "cancelled";
   finishedAt?: string | number;
 };
 
 const TITLES: Record<string, string> = {
-  running: "Working…", awaiting_approval: "Waiting for approval", done: "Done", failed: "Failed", cancelled: "Cancelled",
+  running: "Working…", awaiting_approval: "Waiting for approval", done: "Done", failed: "Failed", cancelled: "Cancelled", expired: "Expired",
 };
 
+/** An approval card still open for a step: shown under its line, with a Jump link when the message is known. */
+export type PendingApproval = { stepKey: string; summary: string; channelId?: string; url?: string };
+
+const STEP_NOTE: Partial<Record<StepState["status"], string>> = {
+  awaiting_approval: " · _awaiting approval_", cancelled: " · _stopped_", skipped: " · _not started_",
+};
+
+/** Stop is offered while the run can still do something (docs/CARDS.md §7). */
+export const isLiveRun = (status: string) => status === "running" || status === "awaiting_approval" || status === "approved";
+
 /**
- * Live status card (§8.2). Text-only on purpose: it is edited in place on every level change,
- * and an edit that references `attachment://` would drop the file.
+ * Live status card (§8.2), the run's control surface. Text-only on purpose: it is edited in place
+ * on every transition, and an edit that references `attachment://` would drop the file.
  */
 export function statusCard(input: {
   runId: string; request: string; status: string; steps: StepState[]; note?: string; dashboardUrl?: string;
+  /** Mention of whoever pressed Stop; turns a `cancelled` run with steps into "Stopped". */
+  stoppedBy?: string;
+  /** Open approval cards, grouped under their steps (docs/CARDS.md §10). */
+  pending?: PendingApproval[];
 }): Card {
   const { steps } = input;
   const finished = steps.filter((s) => s.status === "done" || s.status === "failed").length;
   const lines = steps.map((s) => {
     const a = agentMeta(s.agent);
     const when = s.finishedAt && (s.status === "done" || s.status === "failed") ? ` · ${ts(s.finishedAt)}` : "";
-    const waiting = s.status === "awaiting_approval" ? " · _awaiting approval_" : "";
-    return `${statusEmoji(s.status)} ${a.emoji} **${a.label}** — ${truncate(s.instruction, 140)}${waiting}${when}`;
+    const open = (input.pending ?? []).filter((p) => p.stepKey === s.id);
+    const waiting = open.length ? `\n-# waiting on: ${open.slice(0, 3).map((p) => `${truncate(p.summary, 60)}${p.channelId ? ` (<#${p.channelId}>)` : ""}`).join(" · ")}${open.length > 3 ? ` · +${open.length - 3} more` : ""}` : "";
+    return `${statusEmoji(s.status)} ${a.emoji} **${a.label}** — ${truncate(s.instruction, 140)}${STEP_NOTE[s.status] ?? ""}${when}${waiting}`;
   });
+  const jumps: Action[] = (input.pending ?? []).filter((p) => p.url).slice(0, 5)
+    .map((p) => ({ kind: "link", url: p.url!, label: truncate(`Jump: ${p.summary}`, 40) }));
+  const stopped = input.status === "cancelled" && (input.stoppedBy || steps.length);
+  const note = input.note ?? (stopped ? `⏹ **Stopped**${input.stoppedBy ? ` by ${input.stoppedBy}` : ""} · tool calls already in flight finished; nothing new started.` : undefined);
+  const row: Action[] = [
+    ...(isLiveRun(input.status) ? [{ kind: "button", id: `run:stop:${input.runId}`, label: "Stop", style: "danger" } as Action] : []),
+    ...(input.dashboardUrl ? [{ kind: "link", url: input.dashboardUrl, label: "Open run" } as Action] : []),
+  ];
   return {
     accent: STATUS_COLORS[input.status] ?? TETHER,
-    title: TITLES[input.status] ?? input.status,
+    title: stopped ? "Stopped" : TITLES[input.status] ?? input.status,
     blocks: [
       text(quote(input.request, 200)),
       ...(steps.length ? [text(`${stepSquares(steps.map((s) => s.status))}  **${finished}/${steps.length}** steps finished`), text(lines.join("\n"))] : []),
-      ...(input.note ? [text(input.note)] : []),
+      ...(note ? [text(note)] : []),
     ],
-    actions: input.dashboardUrl ? [[{ kind: "link", url: input.dashboardUrl, label: "Open run" }]] : undefined,
+    actions: [row, jumps].filter((r) => r.length),
     footer: `run ${shortId(input.runId)}`,
   };
 }

@@ -129,9 +129,20 @@ export function fixtures(): Fixture[] {
   return [
     { name: "primitives", card: primitivesCard() },
     { name: "plan", card: planCard({ runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, requester: { name: "Fayez" }, createdAt: NOW - 2 * MIN }) },
-    { name: "plan-approved", card: planCard({ runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, requester: { name: "Fayez" }, createdAt: NOW - 2 * MIN, decision: { approved: true, by: "Fayez", at: NOW - MIN } }) },
+    { name: "plan-approved", card: planCard({ runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, requester: { name: "Fayez" }, createdAt: NOW - 2 * MIN, decision: { status: "approved", by: "Fayez", at: NOW - MIN } }) },
     { name: "status-running", card: statusCard({ runId: RUN, request: DEMO_REQUEST, status: "running", steps: steps(["done", "running", "running", "pending"]) }) },
     { name: "status-done", card: statusCard({ runId: RUN, request: DEMO_REQUEST, status: "done", steps: steps(["done", "done", "done", "done"]) }) },
+    {
+      name: "status-waiting", card: statusCard({
+        runId: RUN, request: DEMO_REQUEST, status: "awaiting_approval", steps: steps(["done", "awaiting_approval", "running", "pending"]), dashboardUrl: "https://tether.example.com/runs/1",
+        pending: [
+          { stepKey: DEMO_PLAN.steps[1]!.id, summary: 'Send email to priya@shopify.com: "Gold confirmed — thank you"', channelId: "1568699100117999762", url: "https://discord.com/channels/1/2/3" },
+          { stepKey: DEMO_PLAN.steps[1]!.id, summary: "Create event \"Shopify kickoff\" at 2026-11-09T09:00", channelId: "1568699100117999762", url: "https://discord.com/channels/1/2/4" },
+        ],
+      }),
+    },
+    { name: "approval-edited", card: approvalCard({ ...APPROVALS.email, approverRole: "lead" }, { context: { runUrl: "https://discord.com/channels/1/2/3" }, edited: { by: "Fayez", at: NOW - MIN, fields: ["subject", "body"] } }) },
+    { name: "status-stopped", card: statusCard({ runId: RUN, request: DEMO_REQUEST, status: "cancelled", steps: steps(["done", "cancelled", "cancelled", "skipped"]), stoppedBy: "Fayez" }) },
     { name: "approval-email", card: approvalCard(APPROVALS.email) },
     { name: "approval-announcement", card: approvalCard(APPROVALS.announcement, { context: { channels } }) },
     { name: "approval-expense", card: approvalCard(APPROVALS.expense, { context: { budget: { category: "Food", allocated: 4000, spent: 1850 } } }) },
@@ -141,6 +152,12 @@ export function fixtures(): Fixture[] {
     { name: "approval-fallback", card: approvalCard(APPROVALS.fallback) },
     { name: "approval-decided", card: approvalCard(APPROVALS.email, { decision: { status: "executed", by: "Fayez", at: NOW - 30 * 1000 } }) },
     { name: "approval-rejected", card: approvalCard(APPROVALS.expense, { context: { budget: { category: "Food", allocated: 4000, spent: 1850 } }, decision: { status: "rejected", by: "Fayez", at: NOW } }) },
+    // docs/CARDS.md §2: the transient and terminal states a card can be redrawn into from its row.
+    { name: "approval-approving", card: approvalCard({ ...APPROVALS.email, approverRole: "lead" }, { decision: { status: "approved", by: "Fayez", at: NOW } }) },
+    { name: "approval-failed", card: approvalCard(APPROVALS.email, { decision: { status: "failed", by: "Fayez", at: NOW, note: "Gmail: 403 insufficient permissions" } }) },
+    { name: "approval-orphaned", card: approvalCard(APPROVALS.nudge, { decision: { status: "expired", at: NOW - 5 * MIN, note: "the run failed before a decision" } }) },
+    { name: "approval-cancelled", card: approvalCard(APPROVALS.announcement, { context: { channels }, decision: { status: "cancelled", by: "Fayez", at: NOW - MIN } }) },
+    { name: "plan-expired", card: planCard({ runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, requester: { name: "Fayez" }, createdAt: NOW - 24 * 60 * MIN, decision: { status: "expired", at: NOW } }) },
     {
       name: "summary", card: summaryCard({
         runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, status: "done", finishedAt: NOW,
@@ -150,6 +167,22 @@ export function fixtures(): Fixture[] {
           { id: "s3", agent: "finance", status: "done", output: "Recorded $2,000 sponsorship. Prizes: $0 spent of $3,000 allocated." },
           { id: "s4", agent: "socials", status: "skipped" },
           { id: "s5", agent: "coordination", status: "done", output: "Created task *Send Shopify booth requirements* for Sam, due Wed Nov 11." },
+        ],
+      }),
+    },
+    {
+      name: "summary-stopped", card: summaryCard({
+        runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, status: "cancelled", finishedAt: NOW, stoppedBy: "Fayez",
+        steps: [
+          { id: "s1", agent: "outreach", status: "done", output: "Shopify is now **confirmed** at $2,000 (Gold). Thank-you email sent to Priya." },
+          { id: "s2", agent: "calendar", status: "cancelled" },
+          { id: "s3", agent: "finance", status: "cancelled", output: "" },
+          { id: "s4", agent: "socials", status: "skipped" },
+          { id: "s5", agent: "coordination", status: "skipped" },
+        ],
+        sideEffects: [
+          { agent: "outreach", summary: "Email Priya Nair (Shopify): Thank you — Gold confirmed", at: NOW - 4 * MIN },
+          { agent: "outreach", summary: "Move Shopify to confirmed ($2,000, Gold)", at: NOW - 4 * MIN },
         ],
       }),
     },

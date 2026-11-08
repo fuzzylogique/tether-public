@@ -1,11 +1,12 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { inngest } from "../client.js";
 import { db } from "../../db/client.js";
 import { runs, steps, events } from "../../db/schema.js";
 import { levels } from "../../runtime/planner.js";
 import type { Notifier } from "../../tools/types.js";
 import { runAgentStepFn } from "./steps.js";
-import { statusCard, type StepState } from "../../ui/cards/status.js";
+import type { StepState } from "../../ui/cards/status.js";
+import { refreshRunCard } from "../../runtime/status.js";
 import { summaryCard } from "../../ui/cards/summary.js";
 import { agentMeta } from "../../ui/cards/agent.js";
 import { dashboardRunUrl } from "../../runtime/cards.js";
@@ -14,7 +15,9 @@ const cache = new WeakMap<Notifier, ReturnType<typeof build>>();
 
 function build(notifier: Notifier) {
   return inngest.createFunction(
-    { id: "run-plan", retries: 1 },
+    // Stop: no further step is scheduled once the matching run.cancelled arrives. Children invoked
+    // with step.invoke are not cancelled with their parent, so run-agent-step carries the same rule.
+    { id: "run-plan", retries: 1, cancelOn: [{ event: "tether/run.cancelled", if: "event.data.runId == async.data.runId" }] },
     { event: "tether/plan.approved" },
     async ({ event, step }) => {
       const runId = event.data.runId;
@@ -39,17 +42,27 @@ function build(notifier: Notifier) {
 
       const outputs: Record<string, string> = {};
       const enabled = plan.steps.filter((s) => s.enabled);
-      // Structured step state; the status card builder does all the formatting.
+      // Outcome per step for the summary card; the live status card reads the rows instead (runtime/status.ts).
       const state: Record<string, StepState> = Object.fromEntries(enabled.map((s) => [s.id, { id: s.id, agent: s.agent, instruction: s.instruction, status: "pending" }]));
       const dashboardUrl = dashboardRunUrl(runId);
-      const renderStatus = (status: string) =>
-        notifier.updateStatus({ run: runRef, status, card: statusCard({ runId, request: run.request, status, steps: enabled.map((s) => state[s.id]!), dashboardUrl }) });
+      const refresh = () => refreshRunCard(runId, notifier).catch((e) => console.warn("status re-render failed", e));
 
-      await step.run("status-initial", () => renderStatus("running"));
+      await step.run("status-initial", refresh);
 
       for (const [li, level] of levels(plan).entries()) {
+        // cancelOn stops this function and each child separately, so a level boundary can race a Stop
+        // and invoke a child the cancel event no longer matches. The row is the authority.
+        const stopped = await step.run(`check-stopped-${li}`, async () => {
+          const [r] = await db().select({ status: runs.status }).from(runs).where(eq(runs.id, runId));
+          return r?.status === "cancelled";
+        });
+        if (stopped) return { status: "cancelled" as const, outputs };
         for (const s of level) state[s.id]!.status = "running";
-        await step.run(`status-level-${li}`, () => renderStatus("running"));
+        await step.run(`status-level-${li}`, async () => {
+          await db().update(steps).set({ status: "running", updatedAt: new Date() })
+            .where(and(inArray(steps.id, level.map((s) => stepIdByKey[s.id]!)), eq(steps.status, "pending")));
+          await refresh();
+        });
 
         const results = await Promise.all(level.map((s) =>
           step.invoke(`step-${s.id}`, {
@@ -69,7 +82,9 @@ function build(notifier: Notifier) {
         for (const [i, s] of level.entries()) {
           const r = results[i]!;
           if ("crashed" in r) {
-            await step.run(`mark-crashed-${s.id}`, () => db().update(steps).set({ status: "failed", output: r.output, updatedAt: new Date() }).where(eq(steps.id, stepIdByKey[s.id]!)));
+            // A child cancelled by Stop also surfaces here; cancelRun already marked it, keep that.
+            await step.run(`mark-crashed-${s.id}`, () => db().update(steps).set({ status: "failed", output: r.output, updatedAt: new Date() })
+              .where(and(eq(steps.id, stepIdByKey[s.id]!), ne(steps.status, "cancelled"))));
           }
           outputs[s.id] = r.output;
           Object.assign(state[s.id]!, { status: r.status === "done" ? "done" : "failed", finishedAt: "finishedAt" in r ? r.finishedAt : undefined });
@@ -78,10 +93,13 @@ function build(notifier: Notifier) {
 
       const failed = Object.values(state).some((v) => v.status === "failed");
       const summary = enabled.map((s) => `**${agentMeta(s.agent).label}**\n${outputs[s.id] ?? "(no output)"}`).join("\n\n");
-      await step.run("finish", async () => {
-        await db().update(runs).set({ status: failed ? "failed" : "done", summary, updatedAt: new Date() }).where(eq(runs.id, runId));
+      const finished = await step.run("finish", async () => {
+        // Stopped during the last level: cancelRun owns the status card and summary.
+        const [current] = await db().update(runs).set({ status: failed ? "failed" : "done", summary, updatedAt: new Date() })
+          .where(and(eq(runs.id, runId), ne(runs.status, "cancelled"))).returning({ id: runs.id });
+        if (!current) return false;
         await db().insert(events).values({ orgId: run.orgId, runId, kind: failed ? "run_failed" : "run_done", data: {} });
-        await renderStatus(failed ? "failed" : "done");
+        await refresh();
         await notifier.postSummary({
           run: runRef,
           card: summaryCard({
@@ -89,7 +107,9 @@ function build(notifier: Notifier) {
             steps: plan.steps.map((s) => ({ id: s.id, agent: s.agent, status: !s.enabled ? "skipped" : state[s.id]!.status === "done" ? "done" : "failed", output: outputs[s.id] })),
           }),
         });
+        return true;
       });
+      if (!finished) return { status: "cancelled" as const, outputs };
 
       // Tier 1 escalation: a single agent said the rest needs other agents.
       const needsPlan = Object.values(outputs).map((o) => o.match(/NEEDS_PLAN:\s*(.+)$/m)?.[1]).find(Boolean);

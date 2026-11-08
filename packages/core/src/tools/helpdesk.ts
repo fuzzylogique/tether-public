@@ -37,6 +37,7 @@ export const escalateToOrganizer = defineTool({
   description: "Forward a participant question the docs cannot answer to the help channel for an organizer.",
   input: z.object({ question: z.string(), context: z.string().optional() }),
   effect: "external", risk: "low",
+  editFields: [{ key: "question", label: "Question", style: "paragraph", required: true }, { key: "context", label: "Context", style: "paragraph" }],
   summarize: (a) => `Escalate question: ${a.question.slice(0, 80)}`,
   async execute(args, ctx) {
     const channelId = ctx.org.channels["ops"];

@@ -25,7 +25,8 @@
     "google:auth": "pnpm --filter @tether/core google:auth",
     "env:check": "pnpm --filter @tether/core env:check",
     "sheet:create": "pnpm --filter @tether/core sheet:create",
-    "google:share": "pnpm --filter @tether/core google:share"
+    "google:share": "pnpm --filter @tether/core google:share",
+    "instagram:check": "pnpm --filter @tether/core instagram:check"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

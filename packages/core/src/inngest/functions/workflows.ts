@@ -5,6 +5,7 @@ import { events, orgs, runs } from "../../db/schema.js";
 import { WORKFLOWS } from "../../workflows/registry.js";
 import type { Notifier } from "../../tools/types.js";
 import { runPlanFn } from "./plans.js";
+import { failRunUnlessCancelled } from "../../runtime/cancel.js";
 
 const cache = new WeakMap<Notifier, ReturnType<typeof build>>();
 
@@ -53,11 +54,8 @@ function build(notifier: Notifier) {
       const result = await step.invoke("execute", { function: runPlanFn(notifier), data: { runId: run.id } })
         .catch(async (e: unknown) => {
           const error = e instanceof Error ? e.message : String(e);
-          await step.run("mark-failed", async () => {
-            await db().update(runs).set({ status: "failed", updatedAt: new Date() }).where(eq(runs.id, run.id));
-            await db().insert(events).values({ orgId: run.orgId, runId: run.id, kind: "run_failed", data: { error } });
-          });
-          return { status: "failed" as const, error };
+          const status = await step.run("mark-failed", () => failRunUnlessCancelled(run.id, error));
+          return { status, error };
         });
       return { runId: run.id, ...result };
     },

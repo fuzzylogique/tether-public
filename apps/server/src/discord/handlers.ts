@@ -1,16 +1,16 @@
 import {
-  ActionRowBuilder, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle,
   type Interaction, type Message, type ChatInputCommandInteraction, type AutocompleteInteraction,
   type ButtonInteraction, type StringSelectMenuInteraction, type ModalSubmitInteraction,
 } from "discord.js";
 import { and, desc, eq, gt, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import {
-  WORKFLOWS, agentNames, agents, approvalCardFor, budgetCard, buildInboxDigest, buildToolCtx, calendarCard, dashboardRunUrl, db, digestCard, getTool, inngest, loadActor,
-  loadOrgByGuild, planCard, schema, sponsorsCard, tasksCard, teamChannelFor, workflowNames,
+  WORKFLOWS, acceptDriveInvite, agentNames, agents, applyEdit, approvalCardFor, budgetCard, buildInboxDigest, buildToolCtx, calendarCard, cancelRun, dashboardRunUrl, db, digestCard, driveInviteFor, editFieldsFor, fieldValue, getTool, hasRole, inngest, isLiveRun, loadActor,
+  loadOrgByGuild, planCard, refreshRunCard, schema, settledDecision, sponsorsCard, tasksCard, teamChannelFor, workflowNames,
   type ApprovalDecision, type BudgetExtras, type BudgetRow, type EventRow, type Plan, type PlanDecision, type SponsorRow, type TaskRow,
 } from "@tether/core";
 import { planEmbed, resultEmbed } from "./embeds.js";
-import { planComponents } from "./notifier.js";
+import { DiscordNotifier, planComponents } from "./notifier.js";
 import { render, renderEdit } from "./ui/render.js";
 import { linksText, provisionTeamChannels } from "./teams.js";
 
@@ -57,6 +57,11 @@ async function channelTranscript(i: ChatInputCommandInteraction, n: number, befo
 }
 
 /** Tier 0: run a read-only tool directly, no LLM. */
+/** `/post … instagram:true` publishes to the org's Instagram account; otherwise the post stays in Discord. */
+function publishTo(i: ChatInputCommandInteraction) {
+  return i.options.getBoolean("instagram") ? "publish it to Instagram with post_instagram and also post the announcement" : "post the announcement";
+}
+
 async function runToolDirect(org: Org, i: ChatInputCommandInteraction, toolName: string, args: Record<string, unknown>) {
   const tool = getTool(toolName);
   if (!tool || tool.effect !== "read") throw new Error(`tool ${toolName} is not a direct read tool`);
@@ -145,11 +150,11 @@ async function onCommand(i: ChatInputCommandInteraction) {
     case "cal:add":
       return emitRequest(org, i, { mode: "agent", agent: "calendar", text: i.options.getString("request", true) });
     case "post:draft":
-      return emitRequest(org, i, { mode: "agent", agent: "socials", text: `Draft a ${i.options.getString("platform") ?? "instagram"} post. Brief: ${i.options.getString("brief", true)}. Generate copy and a hero image, then post the announcement (will be approved).` });
+      return emitRequest(org, i, { mode: "agent", agent: "socials", text: `Draft a ${i.options.getString("platform") ?? "instagram"} post. Brief: ${i.options.getString("brief", true)}. Generate copy and a hero image, then ${publishTo(i)} (will be approved).` });
     case "post:recap": {
       const n = i.options.getInteger("photos") ?? 4;
       const brief = i.options.getString("brief") ?? "Recap of the event so far";
-      return emitRequest(org, i, { mode: "agent", agent: "socials", text: `Create a ${i.options.getString("platform") ?? "instagram"} recap post from the team's photos. Brief: ${brief}. List the event photos, pick the best ${n} with captions, write copy that matches them, then post the announcement with those photos (will be approved).` });
+      return emitRequest(org, i, { mode: "agent", agent: "socials", text: `Create a ${i.options.getString("platform") ?? "instagram"} recap post from the team's photos. Brief: ${brief}. List the event photos, pick the best ${n} with captions, write copy that matches them, then ${publishTo(i)} with those photos (will be approved).` });
     }
     case "plan:": {
       const request = i.options.getString("request")?.trim();
@@ -266,52 +271,151 @@ async function loadRun(runId: string) {
 }
 
 type Run = typeof schema.runs.$inferSelect;
+type ActionRow = typeof schema.actions.$inferSelect;
 type Interactive = ButtonInteraction | StringSelectMenuInteraction | ModalSubmitInteraction;
 
-/** Re-render a plan message: a V2 card, or the legacy embed for messages posted before the migration. */
-async function updatePlan(i: Interactive, run: Run, plan: Plan, decision?: PlanDecision) {
-  if (!("update" in i)) return;
-  if (i.message?.embeds.length) {
-    const status = decision ? `${decision.approved ? "Approved" : "Cancelled"} by ${decision.by}` : undefined;
-    return i.update({ embeds: [planEmbed(run.id, run.request, plan, status)], components: decision ? [] : planComponents(run.id, plan) });
+/**
+ * Acknowledge inside Discord's 3-second window before any DB or Inngest work. Component clicks and
+ * modals opened from a message are deferred as an update (so `editReply` redraws the card in place);
+ * a modal with no message gets an ephemeral reply. Returns whether the card itself can be edited.
+ */
+async function ack(i: Interactive): Promise<boolean> {
+  if (i.isModalSubmit()) {
+    if (i.isFromMessage()) { await i.deferUpdate(); return true; }
+    await i.deferReply({ ephemeral: true });
+    return false;
   }
-  return i.update(await renderEdit(planCard({
+  await i.deferUpdate();
+  return true;
+}
+
+/** Ephemeral note after `ack`: a follow-up when the card was deferred, otherwise the deferred reply itself. */
+function notice(i: Interactive, inMessage: boolean, content: string) {
+  return inMessage ? i.followUp({ content, ephemeral: true, allowedMentions: { parse: [] } }) : i.editReply({ content, allowedMentions: { parse: [] } });
+}
+
+/** Re-render a plan message in place: a V2 card, or the legacy embed for messages posted before the migration. */
+async function updatePlan(i: Interactive, run: Run, plan: Plan, decision?: PlanDecision) {
+  if (i.isModalSubmit() && !i.isFromMessage()) return;
+  if (i.message?.embeds.length) {
+    const status = decision ? `${decision.status[0]!.toUpperCase()}${decision.status.slice(1)}${decision.by ? ` by ${decision.by}` : ""}` : undefined;
+    return i.editReply({ embeds: [planEmbed(run.id, run.request, plan, status)], components: decision ? [] : planComponents(run.id, plan) });
+  }
+  return i.editReply(await renderEdit(planCard({
     runId: run.id, request: run.request, plan, requester: { discordId: run.actorDiscordId }, createdAt: run.createdAt,
     decision, dashboardUrl: dashboardRunUrl(run.id),
   })));
 }
 
-/** Re-render an approval message with its decision (buttons removed). */
-async function updateApproval(i: Interactive, action: typeof schema.actions.$inferSelect, decision: ApprovalDecision, args?: Record<string, unknown>) {
-  if (!("update" in i)) return;
+/** The decision a plan card should show for a run that is no longer `proposed`, when repairing a stale card. */
+function planDecisionFor(run: Run): PlanDecision | undefined {
+  switch (run.status) {
+    case "proposed": return undefined;
+    case "cancelled": return { status: "cancelled", at: run.updatedAt };
+    case "expired": return { status: "expired", at: run.updatedAt };
+    default: return { status: "approved", at: run.updatedAt };
+  }
+}
+
+/** Re-render an approval message in place with its decision (buttons removed). */
+async function updateApproval(i: Interactive, action: ActionRow, decision: ApprovalDecision, args?: Record<string, unknown>) {
+  if (i.isModalSubmit() && !i.isFromMessage()) return;
   if (i.message?.embeds.length) {
     const embed = i.message.embeds[0];
-    const label = decision.status === "edited" ? "✏️ Edited and approved" : decision.status === "rejected" ? "❌ Rejected" : "✅ Approved";
-    return i.update({ content: `${label} by ${decision.by}`, embeds: embed ? [embed] : [], components: [] });
+    const label = decision.status === "rejected" ? "❌ Rejected" : decision.status === "approved" ? "⏳ Approved" : `${decision.status[0]!.toUpperCase()}${decision.status.slice(1)}`;
+    return i.editReply({ content: `${label}${decision.by ? ` by ${decision.by}` : ""}`, embeds: embed ? [embed] : [], components: [] });
   }
   const [org] = await db().select().from(schema.orgs).where(eq(schema.orgs.id, action.orgId));
-  if (!org) return i.update({ components: [] });
-  return i.update(await renderEdit(await approvalCardFor(org, action, decision, args)));
+  if (!org) return i.editReply({ components: [] });
+  return i.editReply(await renderEdit(await approvalCardFor(org, action, decision, args)));
+}
+
+/** Discord role ids of the member who pressed a button; the interaction carries them, no member intent needed. */
+function memberRoleIds(i: Interactive): string[] {
+  const roles = i.member?.roles;
+  if (!roles) return [];
+  return Array.isArray(roles) ? roles : [...roles.cache.keys()];
+}
+
+/**
+ * Tether roles of the person pressing a button: their `users` row (organizer by default) plus every
+ * team whose Discord role they hold (`/tether channels roles:true` creates Lead, Finance, …).
+ */
+async function effectiveRoles(i: Interactive, org: Org): Promise<string[]> {
+  const held = new Set(memberRoleIds(i));
+  const team = Object.entries(org.roles).filter(([, id]) => held.has(id)).map(([key]) => key);
+  const actor = await loadActor(org.id, i.user.id, i.user.displayName);
+  return [...new Set([...actor.roles, ...team])];
+}
+
+/** `true` when the member may act at `need` (docs/CARDS.md §6), otherwise the ephemeral refusal text. */
+async function mayAct(i: Interactive, org: Org, need: string): Promise<true | string> {
+  if (hasRole(await effectiveRoles(i, org), need)) return true;
+  const roleId = org.roles[need];
+  return `This needs a **${need}**${roleId ? ` (<@&${roleId}>)` : ""}. The card is unchanged.`;
+}
+
+/** Requester or organizer+: who may run, cancel or edit a plan. */
+async function mayDecidePlan(i: Interactive, org: Org, run: Run) {
+  return run.actorDiscordId === i.user.id ? true : mayAct(i, org, "organizer");
+}
+
+const loadOrg = async (orgId: string) => (await db().select().from(schema.orgs).where(eq(schema.orgs.id, orgId)))[0];
+const loadAction = async (id: string) => (await db().select().from(schema.actions).where(eq(schema.actions.id, id)))[0];
+
+/** A click on an approval card whose row is no longer pending: redraw the card from the row and say why. */
+async function repairApproval(i: Interactive, inMessage: boolean, action: ActionRow) {
+  const decision = settledDecision(action);
+  if (decision && inMessage) await updateApproval(i, action, decision).catch((e) => console.warn("approval repair failed", e));
+  return notice(i, inMessage, `This action is already **${action.status}**${action.approverDiscordId ? ` (by <@${action.approverDiscordId}>)` : ""}.`);
+}
+
+/** A click on a plan card whose run is no longer proposed: redraw it from the run row and say why. */
+async function repairPlan(i: Interactive, inMessage: boolean, run: Run) {
+  if (inMessage && run.plan) await updatePlan(i, run, run.plan, planDecisionFor(run)).catch((e) => console.warn("plan repair failed", e));
+  return notice(i, inMessage, `This plan is already **${run.status}**.`);
 }
 
 async function onButton(customId: string, i: ButtonInteraction) {
   const [kind, verb, id, sub] = customId.split(":");
+  if (kind === "access" && verb === "share" && id) {
+    const check = await driveInviteFor({ inviteId: id, discordId: i.user.id, memberRoleIds: memberRoleIds(i) });
+    if ("error" in check) return i.reply({ content: check.error, ephemeral: true });
+    const input = new TextInputBuilder().setCustomId("email").setLabel("Google email").setStyle(TextInputStyle.Short)
+      .setPlaceholder("you@gmail.com").setRequired(true).setMaxLength(254);
+    if (check.email) input.setValue(check.email);
+    return i.showModal(new ModalBuilder().setCustomId(`access:submit:${id}`).setTitle("Team Drive access")
+      .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input)));
+  }
+  if (kind === "run" && id) return onRunButton(verb ?? "", id, i);
   if (kind === "plan" && id) {
     const run = await loadRun(id);
     if (!run?.plan) return i.reply({ content: "This plan no longer exists.", ephemeral: true });
-    if (verb === "run" || verb === "cancel") {
-      await inngest.send({ name: "tether/plan.decided", data: { runId: id, approved: verb === "run", plan: run.plan, deciderDiscordId: i.user.id } });
-      await updatePlan(i, run, run.plan, { approved: verb === "run", by: i.user.displayName, at: new Date() });
-      return;
-    }
-    if (verb === "toggle" && sub) {
-      if (run.status !== "proposed") return i.reply({ content: `This plan is already ${run.status}.`, ephemeral: true });
-      const plan: Plan = { ...run.plan, steps: run.plan.steps.map((s) => (s.id === sub ? { ...s, enabled: !s.enabled } : s)) };
-      await db().update(schema.runs).set({ plan, updatedAt: new Date() }).where(eq(schema.runs.id, id));
-      await updatePlan(i, run, plan);
+    if (verb === "run" || verb === "cancel" || verb === "toggle") {
+      await ack(i);
+      if (run.status !== "proposed") return repairPlan(i, true, run);
+      const org = await loadOrg(run.orgId);
+      const allowed = org ? await mayDecidePlan(i, org, run) : true;
+      if (allowed !== true) return notice(i, true, allowed);
+      if (verb === "toggle") {
+        if (!sub) return;
+        const plan: Plan = { ...run.plan, steps: run.plan.steps.map((s) => (s.id === sub ? { ...s, enabled: !s.enabled } : s)) };
+        await db().update(schema.runs).set({ plan, updatedAt: new Date() }).where(eq(schema.runs.id, id));
+        return updatePlan(i, run, plan);
+      }
+      // Compare-and-set so two people pressing Run at once start one run; the loser sees the repaired card.
+      const approved = verb === "run";
+      const [claimed] = await db().update(schema.runs)
+        .set({ status: approved ? "approved" : "cancelled", cancelledBy: approved ? null : i.user.id, updatedAt: new Date() })
+        .where(and(eq(schema.runs.id, id), eq(schema.runs.status, "proposed"))).returning();
+      if (!claimed) return repairPlan(i, true, (await loadRun(id)) ?? run);
+      // Redraw first, then wake the waiter: the executor's own status card edits never race this one.
+      await updatePlan(i, run, run.plan, { status: approved ? "approved" : "cancelled", by: i.user.displayName, at: new Date() }).catch((e) => console.warn("plan re-render failed", e));
+      await inngest.send({ name: "tether/plan.decided", data: { runId: id, approved, plan: run.plan, deciderDiscordId: i.user.id } });
       return;
     }
     if (verb === "edit") {
+      if (run.status !== "proposed") return i.reply({ content: `This plan is already ${run.status}.`, ephemeral: true });
       const modal = new ModalBuilder().setCustomId(`plan:editsubmit:${id}`).setTitle("Edit plan steps");
       for (const s of run.plan.steps.slice(0, 5)) {
         modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -321,27 +425,105 @@ async function onButton(customId: string, i: ButtonInteraction) {
     }
   }
   if (kind === "action" && id) {
-    const [action] = await db().select().from(schema.actions).where(eq(schema.actions.id, id));
+    const action = await loadAction(id);
     if (!action) return i.reply({ content: "Action not found.", ephemeral: true });
-    if (action.status !== "pending") return i.reply({ content: `Already ${action.status}.`, ephemeral: true });
-    if (verb === "approve" || verb === "reject") {
-      await inngest.send({ name: "tether/action.decided", data: { actionId: id, runId: action.runId, approved: verb === "approve", deciderDiscordId: i.user.id, deciderName: i.user.displayName } });
-      await updateApproval(i, action, { status: verb === "approve" ? "approved" : "rejected", by: i.user.displayName, at: new Date() });
-      return;
+    if (verb === "approve") {
+      await ack(i);
+      if (action.status !== "pending") return repairApproval(i, true, action);
+      const org = await loadOrg(action.orgId);
+      const allowed = org ? await mayAct(i, org, action.approverRole ?? "organizer") : true;
+      if (allowed !== true) {
+        await db().insert(schema.events).values({ orgId: action.orgId, runId: action.runId, kind: "approval_denied_role", agent: action.agent, data: { actionId: id, by: i.user.id, need: action.approverRole ?? "organizer" } });
+        return notice(i, true, allowed);
+      }
+      return decideAction(i, action, true);
     }
-    if (verb === "edit") {
-      const modal = new ModalBuilder().setCustomId(`action:editsubmit:${id}`).setTitle(`Edit: ${action.summary.slice(0, 40)}`);
-      const fields = action.tool === "send_email"
-        ? [["subject", "Subject", TextInputStyle.Short], ["body", "Body", TextInputStyle.Paragraph]] as const
-        : [["args", "Arguments (JSON)", TextInputStyle.Paragraph]] as const;
-      for (const [key, label, style] of fields) {
-        const value = key === "args" ? JSON.stringify(action.args, null, 2) : String(action.args[key] ?? "");
-        modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder().setCustomId(key).setLabel(label).setStyle(style).setValue(value.slice(0, 4000)).setRequired(true)));
+    // Edit and Reject open a modal, which has to be the interaction's first response: no defer here.
+    if (verb === "edit" || verb === "reject") {
+      if (action.status !== "pending") { await ack(i); return repairApproval(i, true, action); }
+      const org = await loadOrg(action.orgId);
+      const allowed = org ? await mayAct(i, org, action.approverRole ?? "organizer") : true;
+      if (allowed !== true) return i.reply({ content: allowed, ephemeral: true, allowedMentions: { parse: [] } });
+      if (verb === "reject") {
+        return i.showModal(new ModalBuilder().setCustomId(`action:rejectsubmit:${id}`).setTitle(`Reject: ${action.summary.slice(0, 37)}`)
+          .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(
+            new TextInputBuilder().setCustomId("reason").setLabel("Reason (optional, the agent sees it)").setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(500))));
+      }
+      // Fields come from the tool definition (docs/CARDS.md §9); tools without `editFields` get one JSON field.
+      const modal = new ModalBuilder().setCustomId(`action:editsubmit:${id}`).setTitle(`Edit: ${action.summary.slice(0, 39)}`);
+      for (const f of editFieldsFor(getTool(action.tool))) {
+        const input = new TextInputBuilder().setCustomId(f.key).setLabel(f.label.slice(0, 45))
+          .setStyle(f.style === "short" ? TextInputStyle.Short : TextInputStyle.Paragraph).setRequired(!!f.required).setMaxLength(4000);
+        const value = fieldValue(action.args, f.key).slice(0, 4000);
+        if (value) input.setValue(value);
+        modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
       }
       return i.showModal(modal);
     }
   }
+}
+
+/**
+ * Stop on the status card (docs/CARDS.md §7). `run:stop` asks in an ephemeral prompt; `run:stopconfirm`
+ * does the cleanup through `cancelRun`, which redraws every card of the run and wakes Inngest. A Stop
+ * on a run that already ended redraws the status card from its rows instead.
+ */
+async function onRunButton(verb: string, runId: string, i: ButtonInteraction) {
+  const run = await loadRun(runId);
+  if (!run) return i.reply({ content: "Run not found.", ephemeral: true });
+  const org = await loadOrg(run.orgId);
+  const notifier = new DiscordNotifier(i.client);
+  if (verb === "stop") {
+    if (!isLiveRun(run.status)) {
+      await ack(i);
+      await refreshRunCard(runId, notifier).catch((e) => console.warn("status repair failed", e));
+      return notice(i, true, `This run is already **${run.status}**.`);
+    }
+    const allowed = org ? await mayDecidePlan(i, org, run) : true;
+    if (allowed !== true) return i.reply({ content: allowed, ephemeral: true, allowedMentions: { parse: [] } });
+    return i.reply({
+      ephemeral: true, allowedMentions: { parse: [] },
+      content: `Stop **${run.request.replace(/\s+/g, " ").slice(0, 120)}**?\n-# Tool calls already in flight finish; nothing new starts. Approval cards still waiting on this run close.`,
+      components: [new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`run:stopconfirm:${runId}`).setLabel("Stop run").setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`run:keep:${runId}`).setLabel("Keep running").setStyle(ButtonStyle.Secondary),
+      )],
+    });
+  }
+  if (verb === "keep") return i.update({ content: "Still running.", components: [] });
+  if (verb === "stopconfirm") {
+    await i.update({ content: "Stopping…", components: [] });
+    const allowed = org ? await mayDecidePlan(i, org, run) : true;
+    if (allowed !== true) return i.editReply({ content: allowed, allowedMentions: { parse: [] } });
+    const res = await cancelRun({ runId, by: i.user.id, byName: i.user.displayName, notifier });
+    if (!res.ok) return i.editReply({ content: `This run is already **${res.status ?? "gone"}**.` });
+    const n = (k: number, w: string) => `${k} ${w}${k === 1 ? "" : "s"}`;
+    return i.editReply({ content: `⏹ Stopped. ${n(res.closed, "waiting approval")} closed; ${n(res.executed, "approved action")} had already run.` });
+  }
+}
+
+/**
+ * A human decided a pending action. Claim the row with a compare-and-set (pending → approved | rejected),
+ * redraw the card from the claim, then wake the waiting step function. Redraw before send so the
+ * executor's final render (executed / failed) can never be overwritten by this one.
+ */
+async function decideAction(i: Interactive, action: ActionRow, approved: boolean, opts: { note?: string } = {}) {
+  const inMessage = !(i.isModalSubmit() && !i.isFromMessage());
+  const now = new Date();
+  const [claimed] = await db().update(schema.actions)
+    .set({ status: approved ? "approved" : "rejected", approverDiscordId: i.user.id, decidedAt: now, decisionNote: opts.note })
+    .where(and(eq(schema.actions.id, action.id), eq(schema.actions.status, "pending"))).returning();
+  if (!claimed) return repairApproval(i, inMessage, (await loadAction(action.id)) ?? action);
+  if (inMessage) {
+    await updateApproval(i, claimed, { status: approved ? "approved" : "rejected", by: i.user.displayName, at: now, note: opts.note })
+      .catch((e) => console.warn("approval re-render failed", e));
+  }
+  // Edited args are already on the row (saved by the Edit modal), so the executor reads them from there.
+  await inngest.send({
+    name: "tether/action.decided",
+    data: { actionId: action.id, runId: action.runId, approved, note: opts.note, deciderDiscordId: i.user.id, deciderName: i.user.displayName },
+  });
+  if (!inMessage) await notice(i, false, approved ? "Approved." : "Rejected.");
 }
 
 async function onSelect(customId: string, values: string[], i: StringSelectMenuInteraction) {
@@ -349,6 +531,11 @@ async function onSelect(customId: string, values: string[], i: StringSelectMenuI
   if (kind !== "plan" || verb !== "select" || !id) return;
   const run = await loadRun(id);
   if (!run?.plan) return i.reply({ content: "Plan not found.", ephemeral: true });
+  await ack(i);
+  if (run.status !== "proposed") return repairPlan(i, true, run);
+  const org = await loadOrg(run.orgId);
+  const allowed = org ? await mayDecidePlan(i, org, run) : true;
+  if (allowed !== true) return notice(i, true, allowed);
   const plan: Plan = { ...run.plan, steps: run.plan.steps.map((s) => ({ ...s, enabled: values.includes(s.id) })) };
   await db().update(schema.runs).set({ plan, updatedAt: new Date() }).where(eq(schema.runs.id, id));
   await updatePlan(i, run, plan);
@@ -356,28 +543,57 @@ async function onSelect(customId: string, values: string[], i: StringSelectMenuI
 
 async function onModal(customId: string, i: ModalSubmitInteraction) {
   const [kind, verb, id] = customId.split(":");
+  if (kind === "access" && verb === "submit" && id) {
+    await i.deferReply({ ephemeral: true });
+    const res = await acceptDriveInvite({ inviteId: id, discordId: i.user.id, name: i.user.displayName, memberRoleIds: memberRoleIds(i), email: i.fields.getTextInputValue("email") });
+    if (!("folderUrl" in res)) return i.editReply(res.error ?? "Could not share the folder.");
+    return i.editReply(`📁 Done. You have ${res.access === "reader" ? "view" : "edit"} access to the team folder${res.calendar ? " and the team calendar" : ""}: <${res.folderUrl}>\nGoogle also sent you an email invite.`);
+  }
   if (kind === "plan" && verb === "editsubmit" && id) {
     const run = await loadRun(id);
     if (!run?.plan) return i.reply({ content: "Plan not found.", ephemeral: true });
+    const inMessage = await ack(i);
+    if (run.status !== "proposed") return repairPlan(i, inMessage, run);
     const plan: Plan = { ...run.plan, steps: run.plan.steps.map((s) => {
       const v = (i.fields.fields.has(s.id) ? i.fields.getTextInputValue(s.id) : "").trim();
       return v ? { ...s, instruction: v } : s;
     }) };
     await db().update(schema.runs).set({ plan, planHistory: [...run.planHistory, plan], updatedAt: new Date() }).where(eq(schema.runs.id, id));
-    if (i.isFromMessage()) await updatePlan(i, run, plan);
-    else await i.reply({ content: "Plan updated.", ephemeral: true });
+    if (inMessage) await updatePlan(i, run, plan);
+    else await notice(i, false, "Plan updated.");
     return;
   }
-  if (kind === "action" && verb === "editsubmit" && id) {
-    const [action] = await db().select().from(schema.actions).where(eq(schema.actions.id, id));
+  if (kind === "action" && (verb === "editsubmit" || verb === "rejectsubmit") && id) {
+    const action = await loadAction(id);
     if (!action) return i.reply({ content: "Action not found.", ephemeral: true });
-    let editedArgs: Record<string, unknown>;
-    const raw = i.fields.fields.has("args") ? i.fields.getTextInputValue("args") : undefined;
-    if (raw) { try { editedArgs = JSON.parse(raw); } catch { return i.reply({ content: "Invalid JSON.", ephemeral: true }); } }
-    else editedArgs = { subject: i.fields.getTextInputValue("subject"), body: i.fields.getTextInputValue("body") };
-    await inngest.send({ name: "tether/action.decided", data: { actionId: id, runId: action.runId, approved: true, editedArgs, deciderDiscordId: i.user.id, deciderName: i.user.displayName } });
-    if (i.isFromMessage()) await updateApproval(i, action, { status: "edited", by: i.user.displayName, at: new Date() }, { ...action.args, ...editedArgs });
-    else await i.reply({ content: "Edited and approved.", ephemeral: true });
+    const inMessage = await ack(i);
+    if (action.status !== "pending") return repairApproval(i, inMessage, action);
+    const org = await loadOrg(action.orgId);
+    const allowed = org ? await mayAct(i, org, action.approverRole ?? "organizer") : true;
+    if (allowed !== true) return notice(i, inMessage, allowed);
+
+    if (verb === "rejectsubmit") {
+      const reason = i.fields.fields.has("reason") ? i.fields.getTextInputValue("reason").trim() : "";
+      return decideAction(i, action, false, { note: reason || undefined });
+    }
+
+    // Save, do not approve: the card re-renders pending with the new args and an edit line (docs/CARDS.md §9).
+    const tool = getTool(action.tool);
+    if (!tool) return notice(i, inMessage, `Tool \`${action.tool}\` no longer exists.`);
+    const fields = Object.fromEntries(editFieldsFor(tool).filter((f) => i.fields.fields.has(f.key)).map((f) => [f.key, i.fields.getTextInputValue(f.key)]));
+    const res = applyEdit(tool, action.args, fields);
+    if (!res.ok) return notice(i, inMessage, `Not saved.\n${res.error}`);
+    if (!res.changed.length) return notice(i, inMessage, "Nothing changed.");
+    const now = new Date();
+    const [row] = await db().update(schema.actions)
+      .set({ args: res.args, summary: tool.summarize(res.args), editedBy: i.user.id, editedAt: now, editedFields: res.changed })
+      .where(and(eq(schema.actions.id, id), eq(schema.actions.status, "pending"))).returning();
+    if (!row) return repairApproval(i, inMessage, (await loadAction(id)) ?? action);
+    await db().insert(schema.events).values({ orgId: row.orgId, runId: row.runId, kind: "action_edited", agent: row.agent, data: { actionId: id, by: i.user.id, fields: res.changed } });
+    if (inMessage && org) {
+      return i.editReply(await renderEdit(await approvalCardFor(org, row, undefined, undefined, { by: i.user.displayName, at: now, fields: res.changed })));
+    }
+    return notice(i, inMessage, `Saved: ${res.changed.join(", ")} changed. Approve the card when it reads right.`);
   }
 }
 

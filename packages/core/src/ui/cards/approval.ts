@@ -1,5 +1,5 @@
 import type { ActionRef } from "../../tools/types.js";
-import { GREEN, GREY, RED, thresholdColor } from "../tokens.js";
+import { AMBER, GREEN, GREY, RED } from "../tokens.js";
 import { fmtMoney, kv, kvText, progress, shortId, text, truncate, ts, type Action, type Block, type Card } from "../card.js";
 import { agentMeta } from "./agent.js";
 
@@ -8,13 +8,26 @@ export type ApprovalContext = {
   budget?: { category: string; allocated: number; spent: number };
   channels?: Record<string, string>;
   conflicts?: { title: string; start: string }[];
+  /** Link to the run's status card (the "↩ Run" button). */
+  runUrl?: string;
 };
 
+/**
+ * How the card left (or is leaving) `pending`. `approved` is the transient state between a human's
+ * yes and the executor's re-render; `cancelled` is a run stopped before a decision (docs/CARDS.md §2).
+ */
 export type ApprovalDecision = {
-  status: "approved" | "rejected" | "edited" | "executed" | "failed" | "expired";
+  status: "approved" | "rejected" | "executed" | "failed" | "expired" | "cancelled";
   by?: string;
   at?: Date | string | number;
   note?: string;
+};
+
+/** A save from the Edit modal. The card stays pending; Approve is a separate click (docs/CARDS.md §9). */
+export type ApprovalEdit = { by?: string; at?: Date | string | number; fields?: string[] };
+
+const DECISION_ACCENT: Record<ApprovalDecision["status"], string> = {
+  approved: AMBER, executed: GREEN, rejected: RED, failed: RED, expired: GREY, cancelled: GREY,
 };
 
 const str = (v: unknown) => (v === undefined || v === null ? "" : String(v));
@@ -96,6 +109,25 @@ function bodyFor(a: ActionRef, ctx?: ApprovalContext): Block[] {
         ...(urls.length ? [{ kind: "gallery", items: urls.map((url, i) => ({ url, alt: urls.length === 1 ? "hero image" : `photo ${i + 1}` })) } as Block] : []),
       ];
     }
+    case "post_instagram": {
+      const urls = (Array.isArray(args.imageUrls) ? (args.imageUrls as unknown[]).map(str) : []).slice(0, 10);
+      return [
+        kv([["Publishes to", "Instagram (public)"], ["Format", urls.length > 1 ? `Carousel of ${urls.length}, cropped 4:5` : "Single photo"]]),
+        text(blockquote(str(args.caption), 1800)),
+        ...(urls.length ? [{ kind: "gallery", items: urls.map((url, i) => ({ url, alt: `photo ${i + 1}` })) } as Block] : []),
+      ];
+    }
+    case "request_drive_access": {
+      const teams = Array.isArray(args.teams) ? (args.teams as unknown[]).map(str) : [];
+      const people = Array.isArray(args.discordIds) ? (args.discordIds as unknown[]).map((id) => `<@${str(id)}>`) : [];
+      return [
+        kv([["Asks", [...teams.map((t) => `@${t}`), ...people].join(" ") || "nobody"], ["Access", str(args.access) === "reader" ? "Viewer" : "Editor"], ["Posts to", channel(ctx, "ops")]]),
+        text("Each person who submits their email is added to the team Drive folder (and the sheet inside it) without another approval."),
+        ...(args.message ? [text(blockquote(str(args.message), 600))] : []),
+      ];
+    }
+    case "share_drive_folder":
+      return [kv([["With", (Array.isArray(args.emails) ? (args.emails as unknown[]).map(str) : []).join(", ") || "none"], ["Access", str(args.access) === "reader" ? "Viewer" : "Editor"]])];
     case "log_expense":
       return expenseBlocks(args, ctx);
     case "create_event":
@@ -111,39 +143,48 @@ function bodyFor(a: ActionRef, ctx?: ApprovalContext): Block[] {
   }
 }
 
-function decisionLine(d: ApprovalDecision) {
+function decisionLine(d: ApprovalDecision, tool: string) {
   const by = d.by ? ` by ${d.by}` : "";
   const at = d.at ? ` · ${ts(d.at)}` : "";
   const note = d.note ? `\n-# ${truncate(d.note, 300)}` : "";
   switch (d.status) {
-    case "approved": return `:tether_done: **Approved**${by}${at}`;
-    case "edited": return `✏️ **Edited and approved**${by}${at}`;
+    case "approved": return `:tether_running: **Approved**${by} · running \`${tool}\`…`;
     case "executed": return `:tether_done: **Approved**${by} · executed${at}${note}`;
     case "rejected": return `:tether_failed: **Rejected**${by}${at}${note}`;
     case "failed": return `:tether_failed: **Approved${by}, but it failed**${at}${note}`;
-    case "expired": return `⌛ **Expired** without a decision${at}`;
+    case "expired": return `⌛ **Expired** without a decision${at}${note}`;
+    case "cancelled": return `⏹ **Run stopped**${by} before a decision${at}${note}`;
   }
 }
 
+function editLine(e: ApprovalEdit) {
+  const fields = e.fields?.length ? ` · ${e.fields.slice(0, 5).join(", ")} changed` : "";
+  return `✏️ **Edited**${e.by ? ` by ${e.by}` : ""}${e.at ? ` ${ts(e.at)}` : ""}${fields}`;
+}
+
 /** Approval card (§8.3): one renderer per tool, generic key/value fallback that shows every arg. */
-export function approvalCard(a: ActionRef, opts: { context?: ApprovalContext; decision?: ApprovalDecision } = {}): Card {
+export function approvalCard(a: ActionRef, opts: { context?: ApprovalContext; decision?: ApprovalDecision; edited?: ApprovalEdit } = {}): Card {
   const meta = agentMeta(a.agent);
   const d = opts.decision;
-  const accent = !d ? meta.color : d.status === "rejected" || d.status === "failed" ? RED : d.status === "expired" ? GREY : GREEN;
-  const gate = a.risk === "high" ? "risk high · needs lead" : `risk ${a.risk}`;
+  const accent = d ? DECISION_ACCENT[d.status] : meta.color;
+  const gate = a.approverRole ? `risk ${a.risk} · needs ${a.approverRole}` : `risk ${a.risk}`;
+  const runLink: Action[] = opts.context?.runUrl ? [{ kind: "link", url: opts.context.runUrl, label: "↩ Run" }] : [];
   const actions: Action[][] = [];
   if (!d) {
     actions.push([
       { kind: "button", id: `action:approve:${a.id}`, label: "Approve", style: "success" },
       { kind: "button", id: `action:edit:${a.id}`, label: "Edit", style: "secondary" },
       { kind: "button", id: `action:reject:${a.id}`, label: "Reject", style: "danger" },
+      ...runLink,
     ]);
+  } else if (runLink.length) {
+    actions.push(runLink);
   }
   return {
     accent,
     title: truncate(a.summary, 200),
     subtitle: `${meta.emoji} ${meta.label} wants to run \`${a.tool}\` · ${gate}`,
-    blocks: [...(d ? [text(decisionLine(d))] : []), ...bodyFor(a, opts.context)],
+    blocks: [...(d ? [text(decisionLine(d, a.tool))] : []), ...(opts.edited ? [text(editLine(opts.edited))] : []), ...bodyFor(a, opts.context)],
     actions,
     footer: `${a.effect} · action ${shortId(a.id)}`,
   };
