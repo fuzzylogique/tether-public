@@ -3,8 +3,8 @@
 #
 #   infra/deploy.sh <ip-or-host> [domain] [--bot]
 #
-# Copies this checkout (minus node_modules, build output and git history) to /opt/tether on the VM, writes the
-# VM's .env from the local one with the public URLs rewritten, installs Docker if missing, and runs Compose.
+# Copies this checkout (minus node_modules, build output and git history) to /opt/tether on the VM, merges the
+# VM's .env with the local one (local non-empty values win, VM-only keys are kept) and rewrites the public URLs, installs Docker if missing, and runs Compose.
 # Without a domain the VM is served at https://<ip-with-dashes>.sslip.io, which needs no DNS setup.
 # `--bot` also starts the Discord gateway on the VM: stop the laptop's `pnpm dev:server` first (one token, one
 # gateway), and set TETHER_RUN_CRONS=1 on exactly one machine.
@@ -21,9 +21,25 @@ fi
 [ -f "$ROOT/.env" ] || { echo "$ROOT/.env missing"; exit 1; }
 
 echo "→ $HOST will serve https://$DOMAIN (bot: $BOT)"
-# The VM's .env: everything local, then the public URLs and the single-process flags fixed for a server.
-TMP_ENV="$(mktemp)"
-grep -vE '^(DOMAIN|APP_BASE_URL|WEB_PUBLIC_URL|SERVER_PUBLIC_URL|INNGEST_DEV|NODE_ENV|NEXT_DIST_DIR)=' "$ROOT/.env" > "$TMP_ENV"
+# The VM's .env is a merge: keys already on the VM are kept, every non-empty key in the local .env overrides them,
+# then the public URLs and single-process flags are fixed for a server. So a teammate whose .env lacks a key
+# (Auth0 on one laptop, Google or Instagram on another) does not wipe it from the VM by redeploying.
+TMP_ENV="$(mktemp)"; REMOTE_ENV="$(mktemp)"
+ssh -o StrictHostKeyChecking=accept-new "$SSH_USER@$HOST" 'cat /opt/tether/.env 2>/dev/null' > "$REMOTE_ENV" || true
+FIXED='^(DOMAIN|APP_BASE_URL|WEB_PUBLIC_URL|SERVER_PUBLIC_URL|INNGEST_DEV|NODE_ENV|NEXT_DIST_DIR)='
+awk -v fixed="$FIXED" '
+  /^[A-Za-z_][A-Za-z0-9_]*=/ {
+    key=$0; sub(/=.*/, "", key); val=$0; sub(/^[^=]*=/, "", val); sub(/[[:space:]]+#.*$/, "", val)
+    if ($0 ~ fixed) next
+    if (FILENAME == ARGV[1]) { if (!(key in seen)) order[++n]=key; seen[key]=1; vals[key]=$0; from[key]="vm" }
+    else if (val != "") { if (!(key in seen)) order[++n]=key; seen[key]=1; vals[key]=$0; from[key]="local" }
+    else if (!(key in seen)) { order[++n]=key; seen[key]=1; vals[key]=$0; from[key]="local(empty)" }
+    next
+  }
+  END { for (i=1;i<=n;i++) { print vals[order[i]]; if (from[order[i]]=="vm") kept=kept" "order[i] }
+        if (kept != "") print "→ kept from the VM (not in local .env):" kept > "/dev/stderr" }
+' "$REMOTE_ENV" "$ROOT/.env" > "$TMP_ENV"
+rm -f "$REMOTE_ENV"
 cat >> "$TMP_ENV" <<ENV
 
 # ---- written by infra/deploy.sh ----
