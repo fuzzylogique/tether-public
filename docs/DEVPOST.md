@@ -11,9 +11,9 @@ Let's Encrypt via sslip.io). The dashboard is up behind her Auth0 tenant; the bo
 
 Still empty on Devpost, all of them need a person:
 - **Video demo link** (required) — teammate is producing the video; paste the YouTube/Vimeo URL under Project details.
-- **Public GitHub repository link** (required) — the working repo stays private; publish a separate public repo from this
-  branch only, without the `refs/entire/checkpoints/*` refs, and link that.
-- **"Try it yourself" section below** — new, not on Devpost yet; paste it in once the public repo URL exists.
+- **Public GitHub repository link** (required) — paste https://github.com/fuzzylogique/tether-public. It is a copy of this
+  branch without the `refs/entire/checkpoints/*` refs; the working repo stays private.
+- **"Try it yourself" section below** — new, not on Devpost yet; paste it into the story.
 - **Teammates** — Manage team, invite by Devpost username or email.
 - **Universities** — currently "University of Waterloo" only; add each teammate's school.
 - **Gemini Project Number** — AI Studio → Get API key → Project number. Needed for the Gemini track.
@@ -29,7 +29,7 @@ The sections below are what was pasted, kept here as the source of truth.
 **Tagline (under 200 characters):**
 The operations team that lives in your hackathon's Discord. Agents plan the work across Sheets, Gmail, Calendar and Instagram, and nothing risky happens until a human approves it.
 
-**Links:** Video `<YouTube or Vimeo URL>` · Code `<GitHub URL, the repo is private today>` · Live dashboard https://216-128-176-47.sslip.io/demo/82c2ea79-d419-4817-854d-5b569b0d349b (public read-only view; the signed-in app behind Auth0 is at the root) · Instagram post https://www.instagram.com/p/DfeOMPijoD-/
+**Links:** Video `<YouTube or Vimeo URL>` · Code https://github.com/fuzzylogique/tether-public · Live dashboard https://216-128-176-47.sslip.io/demo/82c2ea79-d419-4817-854d-5b569b0d349b (public read-only view; the signed-in app behind Auth0 is at the root) · Instagram post https://www.instagram.com/p/DfeOMPijoD-/
 ---
 
 ## Inspiration
@@ -87,7 +87,7 @@ Most of our failures were not about the framework. They were about model discipl
 
 ## Try it yourself
 
-Tether is self-hosted, so you can run it on your own Discord server with your own keys. The minimum is a Discord bot, a free Gemini API key and a Tiger Cloud database; Google, Instagram and Auth0 are optional add-ons. `pnpm env:check` tests each credential with a real call and prints the bot's invite link. The full walkthrough is in the [setup guide](<public repo URL>/blob/main/docs/SELF_HOSTING.md).
+Tether is self-hosted, so you can run it on your own Discord server with your own keys. The minimum is a Discord bot, a free Gemini API key and a Tiger Cloud database; Google, Instagram and Auth0 are optional add-ons. `pnpm env:check` tests each credential with a real call and prints the bot's invite link. The full walkthrough is in the [setup guide](https://github.com/fuzzylogique/tether-public/blob/main/docs/SELF_HOSTING.md).
 
 ## Built with
 
