@@ -43,10 +43,19 @@ const checks: Check[] = [
       const me = (await r.json()) as { username: string; id: string };
       const app = await fetch("https://discord.com/api/v10/applications/@me", { headers: { Authorization: `Bot ${e.DISCORD_TOKEN}` } }).then((x) => x.json()) as { flags?: number; id: string };
       const msgIntent = ((app.flags ?? 0) & (1 << 18)) !== 0 || ((app.flags ?? 0) & (1 << 19)) !== 0;
-      const guild = e.DISCORD_DEV_GUILD_ID
-        ? await fetch(`https://discord.com/api/v10/guilds/${e.DISCORD_DEV_GUILD_ID}`, { headers: { Authorization: `Bot ${e.DISCORD_TOKEN}` } }).then((x) => (x.ok ? "in dev guild ✔" : "NOT in dev guild ✘ (use the invite URL below)"))
-        : "DISCORD_DEV_GUILD_ID empty";
-      const perms = "309237763136";
+      // The bot creates team channels and roles, edits channel permissions and moderates messages, so it is
+      // invited as Administrator. Re-opening the invite URL on a server it is already in upgrades its role.
+      const ADMINISTRATOR = 8n;
+      const guild = e.DISCORD_DEV_GUILD_ID ? await (async () => {
+        const H = { headers: { Authorization: `Bot ${e.DISCORD_TOKEN}` } };
+        const m = await fetch(`https://discord.com/api/v10/guilds/${e.DISCORD_DEV_GUILD_ID}/members/${me.id}`, H);
+        if (!m.ok) return "NOT in dev guild ✘ (use the invite URL below)";
+        const { roles: mine } = (await m.json()) as { roles: string[] };
+        const roles = (await fetch(`https://discord.com/api/v10/guilds/${e.DISCORD_DEV_GUILD_ID}/roles`, H).then((x) => x.json())) as { id: string; permissions: string }[];
+        const perms = roles.filter((r) => r.id === e.DISCORD_DEV_GUILD_ID || mine.includes(r.id)).reduce((a, r) => a | BigInt(r.permissions), 0n);
+        return perms & ADMINISTRATOR ? "in dev guild ✔ (Administrator)" : "in dev guild, but not Administrator ✘ (open the invite URL below to upgrade)";
+      })() : "DISCORD_DEV_GUILD_ID empty";
+      const perms = String(ADMINISTRATOR);
       return `@${me.username} · message content intent ${msgIntent ? "✔" : "✘ (enable in Bot settings)"} · ${guild}\n   invite: https://discord.com/oauth2/authorize?client_id=${app.id}&scope=bot%20applications.commands&permissions=${perms}`;
     },
   },
