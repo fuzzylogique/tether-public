@@ -50,6 +50,8 @@ export default async function WorkspaceOverview({ params }: { params: Promise<{ 
   const s = await workspaceSummary(ws.org);
   const days = daysUntil(s.org.eventStartAt);
   const labels = Object.fromEntries(Object.values(agents()).map((a) => [a.name, a.label]));
+  const activityTotal = s.agentActivity.hours.reduce((sum, h) => sum + h.n, 0);
+  const activityPeak = Math.max(...s.agentActivity.hours.map((h) => h.n));
 
   return (
     <div className="space-y-6">
@@ -129,6 +131,25 @@ export default async function WorkspaceOverview({ params }: { params: Promise<{ 
           {s.inbox.count > s.inbox.threads.length && <p className="muted text-xs mt-3">Run <code className="tag">/digest</code> in Discord for the full list.</p>}
         </Card>
       </div>
+
+      <Card title="Agent activity, last 24 hours" right={activityTotal ? <span className="num text-sm">{activityTotal.toLocaleString("en-CA")} events</span> : undefined}>
+        {activityTotal ? (
+          <>
+            <div className="flex items-end gap-px h-16" role="img" aria-label={`${activityTotal} agent events in the last 24 hours, by hour`}>
+              {s.agentActivity.hours.map((h) => (
+                <div key={h.at.getTime()} className="flex-1" title={`${timeFmt.format(h.at)}: ${h.n}`}
+                  style={h.n ? { height: `${Math.max(6, (h.n / activityPeak) * 100)}%`, background: "var(--brand)" } : { height: 2, background: "var(--sheet-2)" }} />
+              ))}
+            </div>
+            <ul className="flex flex-wrap gap-x-6 gap-y-1 text-sm mt-4">
+              {s.agentActivity.byAgent.map((a) => (
+                <li key={a.agent} className="flex items-center gap-2"><AgentName name={labels[a.agent] ?? a.agent} color={AGENT_COLORS[a.agent]} /><span className="num muted">{a.n}</span></li>
+              ))}
+            </ul>
+            <p className="muted text-xs mt-3">From the TigerData continuous aggregate, refreshed every 5 minutes</p>
+          </>
+        ) : <p className="muted text-sm">No agent activity in the last 24 hours.</p>}
+      </Card>
 
       <Card title="Recent agent work">
         {s.activity.length ? (

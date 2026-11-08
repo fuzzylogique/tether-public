@@ -12,15 +12,16 @@ export const searchDocs = defineTool({
   async execute(args, ctx) {
     const vec = await embed(args.query);
     const vecLiteral = `[${vec.join(",")}]`;
-    // Reciprocal rank fusion of vector similarity and ILIKE keyword hits.
-    // On Tiger with pg_textsearch, swap the keyword CTE for a bm25 <@> ranking.
+    // Reciprocal rank fusion of vector similarity and pg_textsearch BM25. `<@>` is negative for a match
+    // and 0 for a document sharing no terms, so the filter keeps non-matches out of the keyword ranking.
+    const bm25 = sql`content <@> to_bm25query(${args.query}, 'documents_bm25_idx')`;
     const rows = await ctx.db.execute(sql`
       with v as (
         select id, row_number() over (order by embedding <=> ${vecLiteral}::vector) as r
         from documents where org_id = ${ctx.org.id} and embedding is not null limit 20
       ), k as (
-        select id, row_number() over (order by length(content)) as r
-        from documents where org_id = ${ctx.org.id} and content ilike ${"%" + args.query + "%"} limit 20
+        select id, row_number() over (order by ${bm25}) as r
+        from documents where org_id = ${ctx.org.id} and ${bm25} < 0 limit 20
       ), fused as (
         select id, sum(1.0/(60+r)) as score from (select * from v union all select * from k) u group by id
       )

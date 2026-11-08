@@ -1,8 +1,8 @@
-import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "./db/client.js";
 import { env } from "./env.js";
 import {
-  actions, budgetLines, calendarEvents, expenses, orgs, sponsorThreads, sponsors,
+  actions, agentActivityHourly, budgetLines, calendarEvents, expenses, orgs, sponsorThreads, sponsors,
   type IntegrationKey, type MetricKey, type WorkspaceGoals,
 } from "./db/schema.js";
 import { listEvents } from "./google/calendar.js";
@@ -106,6 +106,29 @@ export function todayBounds(now = new Date()) {
 
 export type Progress = { current: number; target?: number; source: string; updatedAt?: string };
 
+export type AgentActivity = { hours: { at: Date; n: number }[]; byAgent: { agent: string; n: number }[] };
+
+/**
+ * Agent events per hour for the last 24 hours, read from the TigerData continuous aggregate
+ * (`agent_activity_hourly`, refreshed every 5 minutes) so neither the dashboard card nor `/tether status`
+ * ever scans the raw `events` hypertable. Hours with no activity are present with `n: 0`.
+ */
+export async function agentActivityLast24h(orgId: string): Promise<AgentActivity> {
+  const HOUR = 3_600_000;
+  const thisHour = Math.floor(Date.now() / HOUR) * HOUR;
+  const hours = Array.from({ length: 24 }, (_, i) => ({ at: new Date(thisHour - (23 - i) * HOUR), n: 0 }));
+  const hourly = await db().select({ bucket: agentActivityHourly.bucket, agent: agentActivityHourly.agent, n: agentActivityHourly.n })
+    .from(agentActivityHourly)
+    .where(and(eq(agentActivityHourly.orgId, orgId), gte(agentActivityHourly.bucket, hours[0]!.at), isNotNull(agentActivityHourly.agent)));
+  const perAgent = new Map<string, number>();
+  for (const row of hourly) {
+    const slot = hours[23 - (thisHour - row.bucket.getTime()) / HOUR];
+    if (slot) slot.n += Number(row.n);
+    perAgent.set(row.agent!, (perAgent.get(row.agent!) ?? 0) + Number(row.n));
+  }
+  return { hours, byAgent: [...perAgent].map(([agent, n]) => ({ agent, n })).sort((a, b) => b.n - a.n) };
+}
+
 export type WorkspaceSummary = {
   org: { id: string; name: string; eventStartAt: Date | null };
   integrations: { key: IntegrationKey; label: string; description: string; status: IntegrationStatus }[];
@@ -117,6 +140,7 @@ export type WorkspaceSummary = {
   todaySource: "google" | "mirror" | "off";
   inbox: { count: number; threads: { sponsor: string; snippet: string; updatedAt: Date }[] };
   activity: { agent: string; summary: string; at: Date }[];
+  agentActivity: AgentActivity;
   pendingApprovals: number;
 };
 
@@ -174,6 +198,8 @@ export async function workspaceSummary(org: Org): Promise<WorkspaceSummary> {
     .orderBy(desc(actions.executedAt)).limit(5);
   const [pending] = await d.select({ n: sql<number>`count(*)::int` }).from(actions).where(and(eq(actions.orgId, org.id), eq(actions.status, "pending")));
 
+  const agentActivity = await agentActivityLast24h(org.id);
+
   return {
     org: { id: org.id, name: org.name, eventStartAt: org.eventStartAt },
     integrations: INTEGRATIONS.map((i) => ({ key: i.key, label: i.label, description: i.description, status: integrationStatus(org, i.key) })),
@@ -190,6 +216,7 @@ export async function workspaceSummary(org: Org): Promise<WorkspaceSummary> {
     today, todaySource,
     inbox: { count: integrationEnabled(org, "gmail") ? waiting?.n ?? 0 : 0, threads: threads.map((t) => ({ sponsor: t.sponsor ?? "Unknown sender", snippet: t.snippet ?? "", updatedAt: t.updatedAt })) },
     activity: activity.filter((a): a is typeof a & { at: Date } => !!a.at),
+    agentActivity,
     pendingApprovals: pending?.n ?? 0,
   };
 }
