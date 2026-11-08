@@ -54,6 +54,13 @@ export async function workspaceFor(user: User, orgId: string) {
   return { org, canEdit: rows.some((r) => hasRole(r.roles, "organizer")) || hasRole(user.roles, "organizer") };
 }
 
+/** The organisation behind a public read-only link (`/demo/[id]`): no membership check, the UUID is the secret. */
+export async function publicWorkspace(orgId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(orgId)) return undefined;
+  const [org] = await db().select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
+  return org;
+}
+
 export async function runDetail(runId: string) {
   const [run] = await db().select().from(schema.runs).where(eq(schema.runs.id, runId));
   if (!run) return undefined;

@@ -5,9 +5,12 @@ Agentic event operations for hackathons and club events, run from Discord with a
 Organizers talk to Tether in Discord. It proposes a plan, they tick the steps they want, and specialized agents (finance, sponsorship outreach, socials, calendar, coordination, helpdesk) do the work through Google Sheets, Gmail, and Calendar. Anything risky waits for a human. Every run is traceable on the dashboard.
 
 ## Stack
-Discord (discord.js) · Gemini (`@google/genai`, function calling + structured output + vision + image gen) · Inngest (durable workflows, human-in-the-loop waits, cron) · TigerData Postgres (hypertables, pgvector hybrid search, forks) · Auth0 (dashboard login, roles) · Next.js dashboard · Vultr VM + Object Storage · GoDaddy domain · Entire (agent session checkpoints).
+Discord (discord.js) · Gemini (`@google/genai`, function calling + structured output + vision + image gen) · Inngest (durable workflows, human-in-the-loop waits, cron) · TigerData Postgres (hypertables, pgvector hybrid search, forks) · Auth0 (dashboard login, roles) · Next.js dashboard · Vultr VM + Object Storage · Entire (agent session checkpoints).
 
-## First run
+## Run it yourself
+[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) takes you from an empty Discord server to a working Tether with your own keys.
+
+## First run (team)
 ```bash
 git clone <repo> && cd tether
 entire enable --agent claude-code     # every teammate, once per clone

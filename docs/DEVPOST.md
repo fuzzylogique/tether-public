@@ -6,13 +6,14 @@ Edit it at https://devpost.com/submit-to/31951-hacktrent-2026/manage/submissions
 
 **Live deployment (Maira, Nov 7 evening):** https://216-128-176-47.sslip.io on a Vultr VM (2 GB, Docker Compose + Caddy,
 Let's Encrypt via sslip.io). The dashboard is up behind her Auth0 tenant; the bot container was down on Nov 8 morning
-(`/health` 502). Only her SSH key and Vultr account can reach it: to redeploy current `main`, she runs
+(`/health` 502). The public `/demo/<org>` view only exists after a redeploy of current `main`; until then that link redirects to the Auth0 login like the root does. Only her SSH key and Vultr account can reach it: to redeploy, she runs
 `infra/deploy.sh 216.128.176.47 --bot` (after stopping the laptop bot), or adds another public key to the VM.
 
 Still empty on Devpost, all of them need a person:
 - **Video demo link** (required) — teammate is producing the video; paste the YouTube/Vimeo URL under Project details.
-- **Public GitHub repository link** (required) — the repo is private and its Entire checkpoint refs hold session transcripts
-  with an Instagram token. Either add judges as collaborators, or push only `main` to a new public repo and link that.
+- **Public GitHub repository link** (required) — the working repo stays private; publish a separate public repo from this
+  branch only, without the `refs/entire/checkpoints/*` refs, and link that.
+- **"Try it yourself" section below** — new, not on Devpost yet; paste it in once the public repo URL exists.
 - **Teammates** — Manage team, invite by Devpost username or email.
 - **Universities** — currently "University of Waterloo" only; add each teammate's school.
 - **Gemini Project Number** — AI Studio → Get API key → Project number. Needed for the Gemini track.
@@ -28,7 +29,7 @@ The sections below are what was pasted, kept here as the source of truth.
 **Tagline (under 200 characters):**
 The operations team that lives in your hackathon's Discord. Agents plan the work across Sheets, Gmail, Calendar and Instagram, and nothing risky happens until a human approves it.
 
-**Links:** Video `<YouTube or Vimeo URL>` · Code `<GitHub URL, the repo is private today>` · Live dashboard https://216-128-176-47.sslip.io (Auth0 login) · Instagram post https://www.instagram.com/p/DfeOMPijoD-/
+**Links:** Video `<YouTube or Vimeo URL>` · Code `<GitHub URL, the repo is private today>` · Live dashboard https://216-128-176-47.sslip.io/demo/82c2ea79-d419-4817-854d-5b569b0d349b (public read-only view; the signed-in app behind Auth0 is at the root) · Instagram post https://www.instagram.com/p/DfeOMPijoD-/
 ---
 
 ## Inspiration
@@ -83,6 +84,10 @@ Most of our failures were not about the framework. They were about model discipl
 - An Undo button for executed actions, and an "always allow this" option so trust can grow over time.
 - A participant-facing helpdesk channel answering from the event's own documents.
 - Write-through to the Sheet for sponsors and tasks.
+
+## Try it yourself
+
+Tether is self-hosted, so you can run it on your own Discord server with your own keys. The minimum is a Discord bot, a free Gemini API key and a Tiger Cloud database; Google, Instagram and Auth0 are optional add-ons. `pnpm env:check` tests each credential with a real call and prints the bot's invite link. The full walkthrough is in the [setup guide](<public repo URL>/blob/main/docs/SELF_HOSTING.md).
 
 ## Built with
 
