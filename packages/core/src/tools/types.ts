@@ -22,9 +22,14 @@ export type ToolCtx = {
   agent: string;
   /** Side channel to the adapter (Discord). */
   notify: Notifier;
+  /** Redraw the run's status card from the rows (docs/GUIDE.md §5.3); the loop calls it after each tool call. */
+  refreshStatus?: () => Promise<void>;
   /** Attachments on the triggering message (receipts, photos). */
   attachments?: { url: string; contentType?: string; name?: string }[];
 };
+
+/** One input on the approval card's Edit modal (docs/CARDS.md §9). `key` is a top-level arg. */
+export type EditField = { key: string; label: string; style: "short" | "paragraph"; required?: boolean };
 
 export interface Tool<I extends z.ZodTypeAny = z.ZodTypeAny, O = unknown> {
   name: string;
@@ -34,6 +39,8 @@ export interface Tool<I extends z.ZodTypeAny = z.ZodTypeAny, O = unknown> {
   risk: Risk;
   /** One-line human summary for approval cards. */
   summarize: (args: z.infer<I>) => string;
+  /** Args a reviewer may change on the approval card (at most 5, Discord's modal limit). Undeclared: one JSON field. */
+  editFields?: EditField[];
   execute: (args: z.infer<I>, ctx: ToolCtx) => Promise<O>;
   /** Compensating action, when one exists. */
   undo?: (args: z.infer<I>, result: O, ctx: ToolCtx) => Promise<void>;
@@ -81,6 +88,8 @@ export type ChannelImage = {
 export type RunRef = { id: string; orgId: string; source: Record<string, string | undefined>; request: string };
 export type ActionRef = {
   id: string; tool: string; agent: string; summary: string; risk: Risk; effect: Effect; args: Record<string, unknown>;
+  /** Minimum role that may decide it ("lead"); undefined = any organizer. */
+  approverRole?: string;
 };
 
 export type UserRow = typeof users.$inferSelect;

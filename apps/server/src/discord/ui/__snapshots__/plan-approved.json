@@ -1,0 +1,70 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 1941109,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Plan · Onboard Shopify as a Gold sponsor\n-# requested by Fayez · <t:1794076080:R> · 4/5 steps on"
+        },
+        {
+          "type": 10,
+          "content": "✅ **Approved** by Fayez · <t:1794076140:R>"
+        },
+        {
+          "type": 10,
+          "content": "> Shopify confirmed $2k! Kick off onboarding: thank them, book the kickoff call, update the budget and tell the team."
+        },
+        {
+          "type": 10,
+          "content": "`1` 🤝 **Sponsorship outreach** 🔒\nMark Shopify confirmed at $2,000 (Gold) and email Priya a thank-you with next steps and the logo spec request."
+        },
+        {
+          "type": 10,
+          "content": "`2` 📅 **Calendar** 🔒 _after 1_\nBook a 30-minute sponsor kickoff call with Shopify on Monday morning and invite Priya."
+        },
+        {
+          "type": 10,
+          "content": "`3` 💸 **Finance** _after 1_\nRecord Shopify's $2,000 against the Prizes line and report what is left."
+        },
+        {
+          "type": 10,
+          "content": "`4` 📣 ~~Socials~~ 🔒 _after 1_\n-# skipped · Draft an announcement thanking Shopify with a hero image."
+        },
+        {
+          "type": 10,
+          "content": "`5` 🧭 **Coordination** _after 2_\nCreate a task for Sam to send Shopify our booth requirements by Wednesday."
+        },
+        {
+          "type": 12,
+          "items": [
+            {
+              "media": {
+                "url": "attachment://plan-7f3c2a91.png"
+              },
+              "description": "Step graph: 1 Sponsorship outreach, 2 Calendar, 3 Finance, 4 Socials, 5 Coordination"
+            }
+          ]
+        },
+        {
+          "type": 10,
+          "content": "-# run 7f3c2a91"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "name": "plan-7f3c2a91.png",
+      "bytes": 45561,
+      "sha256": "a34cd285723969d1cd0825659b84874252cb9cad27d41d692e01bd68dc77c827"
+    }
+  ]
+}

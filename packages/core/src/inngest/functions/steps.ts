@@ -1,23 +1,53 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Content, Part } from "@google/genai";
 import { inngest } from "../client.js";
 import { db } from "../../db/client.js";
-import { steps, actions, agentSessions, events } from "../../db/schema.js";
+import { steps, actions, agentSessions, events, orgs } from "../../db/schema.js";
 import { agents } from "../../agents/registry.js";
 import { runAgentLoop, settleAction, userMessage, type StepRunner } from "../../runtime/loop.js";
 import { buildToolCtx, loadActor } from "../../runtime/context.js";
 import type { Notifier } from "../../tools/types.js";
 import { runs } from "../../db/schema.js";
-import { actionRef, approvalCardFor, approvalContext, settledDecision } from "../../runtime/cards.js";
-import { approvalCard } from "../../ui/cards/approval.js";
+import { actionRef, approvalCardFor, settledDecision } from "../../runtime/cards.js";
 import { shortId } from "../../ui/card.js";
 import { teamChannelFor } from "../../runtime/feed.js";
+import { refreshRunCard } from "../../runtime/status.js";
 
 const cache = new WeakMap<Notifier, ReturnType<typeof build>>();
 
+/**
+ * The step function died after its retries. Its approval cards would otherwise keep live buttons
+ * forever with nobody waiting on them (docs/CARDS.md §8): expire the pending actions, redraw their
+ * cards, and mark the step failed so the status card is honest.
+ */
+async function orphanStep(notifier: Notifier, d: { runId: string; stepId: string; agent: string }, error: string) {
+  const now = new Date();
+  const [run] = await db().select().from(runs).where(eq(runs.id, d.runId));
+  if (!run) return;
+  await db().update(steps).set({ status: "failed", output: `Failed: ${error}`, updatedAt: now }).where(eq(steps.id, d.stepId));
+  const orphaned = await db().update(actions)
+    .set({ status: "expired", decidedAt: now, decisionNote: "the run failed before a decision" })
+    .where(and(eq(actions.stepId, d.stepId), eq(actions.status, "pending"))).returning();
+  const [org] = await db().select().from(orgs).where(eq(orgs.id, run.orgId));
+  for (const row of orphaned) {
+    const decision = settledDecision(row);
+    if (!row.messageRef || !org || !decision) continue;
+    await notifier.editMessage({ ...row.messageRef, card: await approvalCardFor(org, row, decision) })
+      .catch((e) => console.warn("approval re-render failed", e));
+  }
+  await db().insert(events).values({ orgId: run.orgId, runId: d.runId, kind: "step_failed", agent: d.agent, data: { stepId: d.stepId, error: error.slice(0, 500), orphanedActions: orphaned.length } });
+}
+
 function build(notifier: Notifier) {
   return inngest.createFunction(
-    { id: "run-agent-step", retries: 1 },
+    {
+      id: "run-agent-step", retries: 1,
+      cancelOn: [{ event: "tether/run.cancelled", if: "event.data.runId == async.data.runId" }],
+      onFailure: async ({ event, error }) => {
+        const original = event.data.event.data;
+        await orphanStep(notifier, original, error.message);
+      },
+    },
     { event: "tether/step.requested" },
     async ({ event, step }) => {
       const d = event.data;
@@ -29,6 +59,8 @@ function build(notifier: Notifier) {
         if (!r) throw new Error("run missing");
         return r;
       });
+      // Invoked after a Stop landed (see run-plan's check): do nothing, the row already says so.
+      if (run.status === "cancelled") return { status: "failed" as const, output: "Stopped before this step started", finishedAt: new Date().toISOString() };
       const actor = await step.run("load-actor", () => loadActor(run.orgId, d.actorDiscordId, d.actorName));
       const ctx = await buildToolCtx({ orgId: run.orgId, actor, runId: d.runId, stepId: d.stepId, agent: d.agent, notify: notifier, attachments: d.attachments });
       const runRef = { id: run.id, orgId: run.orgId, source: run.source, request: run.request };
@@ -47,7 +79,11 @@ function build(notifier: Notifier) {
 
       const depText = Object.entries(d.dependencyOutputs).map(([k, v]) => `Result of ${k}:\n${v}`).join("\n\n");
       let messages: Content[] = [...prior, userMessage(`${depText ? `${depText}\n\n` : ""}${d.instruction}`)];
-      await step.run("mark-running", () => db().update(steps).set({ status: "running", updatedAt: new Date() }).where(eq(steps.id, d.stepId)));
+      const refresh = () => refreshRunCard(d.runId, notifier).catch((e) => console.warn("status re-render failed", e));
+      await step.run("mark-running", async () => {
+        await db().update(steps).set({ status: "running", updatedAt: new Date() }).where(eq(steps.id, d.stepId));
+        await refresh();
+      });
 
       for (let resume = 0; resume < 4; resume++) {
         const prefixed = ((id: string, fn: () => Promise<unknown>) => step.run(`r${resume}:${id}`, fn)) as unknown as StepRunner;
@@ -63,6 +99,7 @@ function build(notifier: Notifier) {
               await db().insert(agentSessions).values({ threadId: d.sessionThreadId, orgId: run.orgId, agent: d.agent, messages })
                 .onConflictDoUpdate({ target: agentSessions.threadId, set: { messages, updatedAt: new Date() } });
             }
+            await refresh();
             return { finishedAt: new Date().toISOString() };
           });
           return { status, output, finishedAt };
@@ -75,12 +112,11 @@ function build(notifier: Notifier) {
           await db().update(runs).set({ status: "awaiting_approval", updatedAt: new Date() }).where(eq(runs.id, d.runId));
           const refs = await notifier.postApprovalCards({
             run: approvalRun,
-            actions: await Promise.all(rows.map(async (a) => {
-              const ref = actionRef(a);
-              return { ...ref, card: approvalCard(ref, { context: await approvalContext(ctx.org, ref) }) };
-            })),
+            actions: await Promise.all(rows.map(async (a) => ({ ...actionRef(a), card: await approvalCardFor(ctx.org, a) }))),
           });
           for (const ref of refs) await db().update(actions).set({ messageRef: { channelId: ref.channelId, messageId: ref.messageId } }).where(eq(actions.id, ref.id));
+          // Message refs are saved, so the status card can link "Jump" to each open approval.
+          await refresh();
           return refs;
         });
 
@@ -138,7 +174,12 @@ function build(notifier: Notifier) {
           });
         }
         messages.push({ role: "user", parts });
-        await step.run(`r${resume}:mark-running`, () => db().update(steps).set({ status: "running", messages, updatedAt: new Date() }).where(eq(steps.id, d.stepId)));
+        await step.run(`r${resume}:mark-running`, async () => {
+          await db().update(steps).set({ status: "running", messages, updatedAt: new Date() }).where(eq(steps.id, d.stepId));
+          // Back from waiting; the run row only flips back if no other step is still waiting (status.ts derives it).
+          await db().update(runs).set({ status: "running", updatedAt: new Date() }).where(and(eq(runs.id, d.runId), eq(runs.status, "awaiting_approval")));
+          await refresh();
+        });
       }
       const finishedAt = await step.run("too-many-resumes", async () => {
         await db().update(steps).set({ status: "failed", output: "too many approval rounds", updatedAt: new Date() }).where(eq(steps.id, d.stepId));

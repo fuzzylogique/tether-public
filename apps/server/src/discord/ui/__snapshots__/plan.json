@@ -1,0 +1,216 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 7167478,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Plan · Onboard Shopify as a Gold sponsor\n-# requested by Fayez · <t:1794076080:R> · 4/5 steps on"
+        },
+        {
+          "type": 10,
+          "content": "> Shopify confirmed $2k! Kick off onboarding: thank them, book the kickoff call, update the budget and tell the team."
+        },
+        {
+          "type": 9,
+          "components": [
+            {
+              "type": 10,
+              "content": "`1` 🤝 **Sponsorship outreach** 🔒"
+            },
+            {
+              "type": 10,
+              "content": "Mark Shopify confirmed at $2,000 (Gold) and email Priya a thank-you with next steps and the logo spec request."
+            }
+          ],
+          "accessory": {
+            "type": 2,
+            "label": "On",
+            "custom_id": "plan:toggle:7f3c2a91-5b4e-4d2a-9c11-0e8f6a2b4c7d:s1",
+            "style": 3,
+            "disabled": false
+          }
+        },
+        {
+          "type": 9,
+          "components": [
+            {
+              "type": 10,
+              "content": "`2` 📅 **Calendar** 🔒 _after 1_"
+            },
+            {
+              "type": 10,
+              "content": "Book a 30-minute sponsor kickoff call with Shopify on Monday morning and invite Priya."
+            }
+          ],
+          "accessory": {
+            "type": 2,
+            "label": "On",
+            "custom_id": "plan:toggle:7f3c2a91-5b4e-4d2a-9c11-0e8f6a2b4c7d:s2",
+            "style": 3,
+            "disabled": false
+          }
+        },
+        {
+          "type": 9,
+          "components": [
+            {
+              "type": 10,
+              "content": "`3` 💸 **Finance** _after 1_"
+            },
+            {
+              "type": 10,
+              "content": "Record Shopify's $2,000 against the Prizes line and report what is left."
+            }
+          ],
+          "accessory": {
+            "type": 2,
+            "label": "On",
+            "custom_id": "plan:toggle:7f3c2a91-5b4e-4d2a-9c11-0e8f6a2b4c7d:s3",
+            "style": 3,
+            "disabled": false
+          }
+        },
+        {
+          "type": 9,
+          "components": [
+            {
+              "type": 10,
+              "content": "`4` 📣 ~~Socials~~ 🔒 _after 1_"
+            },
+            {
+              "type": 10,
+              "content": "-# skipped · Draft an announcement thanking Shopify with a hero image."
+            }
+          ],
+          "accessory": {
+            "type": 2,
+            "label": "Off",
+            "custom_id": "plan:toggle:7f3c2a91-5b4e-4d2a-9c11-0e8f6a2b4c7d:s4",
+            "style": 2,
+            "disabled": false
+          }
+        },
+        {
+          "type": 9,
+          "components": [
+            {
+              "type": 10,
+              "content": "`5` 🧭 **Coordination** _after 2_"
+            },
+            {
+              "type": 10,
+              "content": "Create a task for Sam to send Shopify our booth requirements by Wednesday."
+            }
+          ],
+          "accessory": {
+            "type": 2,
+            "label": "On",
+            "custom_id": "plan:toggle:7f3c2a91-5b4e-4d2a-9c11-0e8f6a2b4c7d:s5",
+            "style": 3,
+            "disabled": false
+          }
+        },
+        {
+          "type": 12,
+          "items": [
+            {
+              "media": {
+                "url": "attachment://plan-7f3c2a91.png"
+              },
+              "description": "Step graph: 1 Sponsorship outreach, 2 Calendar, 3 Finance, 4 Socials, 5 Coordination"
+            }
+          ]
+        },
+        {
+          "type": 10,
+          "content": "-# run 7f3c2a91 · toggle steps you don't want, then Run"
+        },
+        {
+          "type": 1,
+          "components": [
+            {
+              "type": 3,
+              "custom_id": "plan:select:7f3c2a91-5b4e-4d2a-9c11-0e8f6a2b4c7d",
+              "placeholder": "Choose which steps run",
+              "min_values": 0,
+              "max_values": 5,
+              "options": [
+                {
+                  "label": "1. Sponsorship outreach",
+                  "value": "s1",
+                  "description": "Mark Shopify confirmed at $2,000 (Gold) and email Priya a thank-you with next steps and the logo sp…",
+                  "default": true
+                },
+                {
+                  "label": "2. Calendar",
+                  "value": "s2",
+                  "description": "Book a 30-minute sponsor kickoff call with Shopify on Monday morning and invite Priya.",
+                  "default": true
+                },
+                {
+                  "label": "3. Finance",
+                  "value": "s3",
+                  "description": "Record Shopify's $2,000 against the Prizes line and report what is left.",
+                  "default": true
+                },
+                {
+                  "label": "4. Socials",
+                  "value": "s4",
+                  "description": "Draft an announcement thanking Shopify with a hero image.",
+                  "default": false
+                },
+                {
+                  "label": "5. Coordination",
+                  "value": "s5",
+                  "description": "Create a task for Sam to send Shopify our booth requirements by Wednesday.",
+                  "default": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "components": [
+            {
+              "type": 2,
+              "label": "Run",
+              "custom_id": "plan:run:7f3c2a91-5b4e-4d2a-9c11-0e8f6a2b4c7d",
+              "style": 3,
+              "disabled": false
+            },
+            {
+              "type": 2,
+              "label": "Edit steps",
+              "custom_id": "plan:edit:7f3c2a91-5b4e-4d2a-9c11-0e8f6a2b4c7d",
+              "style": 2,
+              "disabled": false
+            },
+            {
+              "type": 2,
+              "label": "Cancel",
+              "custom_id": "plan:cancel:7f3c2a91-5b4e-4d2a-9c11-0e8f6a2b4c7d",
+              "style": 4,
+              "disabled": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "name": "plan-7f3c2a91.png",
+      "bytes": 45561,
+      "sha256": "a34cd285723969d1cd0825659b84874252cb9cad27d41d692e01bd68dc77c827"
+    }
+  ]
+}

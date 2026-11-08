@@ -77,6 +77,10 @@ export const createEmailDraft = defineTool({
   description: "Create a Gmail draft (not sent). Use when the organizer wants to review in Gmail.",
   input: z.object({ to: z.string().email(), subject: z.string(), body: z.string(), cc: z.string().optional() }),
   effect: "write", risk: "low",
+  editFields: [
+    { key: "to", label: "To", style: "short", required: true }, { key: "cc", label: "Cc", style: "short" },
+    { key: "subject", label: "Subject", style: "short", required: true }, { key: "body", label: "Body", style: "paragraph", required: true },
+  ],
   summarize: (a) => `Draft email to ${a.to}: ${a.subject}`,
   async execute(args) { return createDraft(args); },
 });
@@ -90,6 +94,10 @@ export const sendSponsorEmail = defineTool({
     threadId: z.string().optional().describe("Gmail thread id to reply within"),
   }),
   effect: "external", risk: "high",
+  editFields: [
+    { key: "to", label: "To", style: "short", required: true }, { key: "cc", label: "Cc", style: "short" },
+    { key: "subject", label: "Subject", style: "short", required: true }, { key: "body", label: "Body", style: "paragraph", required: true },
+  ],
   summarize: (a) => `Send email to ${a.to}: "${a.subject}"`,
   async execute(args, ctx) {
     const sent = await sendEmail(args);

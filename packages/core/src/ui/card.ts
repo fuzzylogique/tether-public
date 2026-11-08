@@ -79,7 +79,7 @@ export function progress(done: number, total: number, width = 10, cell?: "🟩" 
 
 /** One square per step, coloured by state: the status card's progress line. */
 export function stepSquares(states: string[]) {
-  const sq: Record<string, string> = { done: "🟩", running: "🟨", awaiting_approval: "🟨", failed: "🟥", skipped: "⬛" };
+  const sq: Record<string, string> = { done: "🟩", running: "🟨", awaiting_approval: "🟨", failed: "🟥", skipped: "⬛", cancelled: "⬛" };
   return states.map((s) => sq[s] ?? "⬜").join("");
 }
 

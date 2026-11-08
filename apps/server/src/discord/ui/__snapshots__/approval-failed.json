@@ -1,0 +1,37 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 14830410,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Send email to priya@shopify.com: \"Welcome aboard, Shopify!\"\n-# 🤝 Sponsorship outreach wants to run `send_email` · risk high · needs lead"
+        },
+        {
+          "type": 10,
+          "content": "❌ **Approved by Fayez, but it failed** · <t:1794076200:R>\n-# Gmail: 403 insufficient permissions"
+        },
+        {
+          "type": 10,
+          "content": "**To**  priya@shopify.com\n**Cc**  none\n**Subject**  Welcome aboard, Shopify!\n**Sponsor**  Shopify"
+        },
+        {
+          "type": 10,
+          "content": ">>> Hi Priya,\n\nThank you so much for confirming Shopify as a Gold sponsor of HackTrent 2026. We're thrilled to have you.\n\nNext steps:\n- We'll send a calendar invite for a short kickoff call on Monday.\n- Could you share your logo (SVG preferred) and brand guidelines by Wednesday?\n\nBest,\nFayez · HackTrent organizing team"
+        },
+        {
+          "type": 10,
+          "content": "-# external · action a1b2c3d4"
+        }
+      ]
+    }
+  ],
+  "files": []
+}

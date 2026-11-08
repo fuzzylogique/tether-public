@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, Partials, Events } from "discord.js";
 import { env } from "@tether/core";
-import { onInteraction, onMessage } from "./handlers.js";
+import { onGuildJoin, onInteraction, onMessage } from "./handlers.js";
 import { loadEmojis } from "./ui/emoji.js";
 
 export async function startDiscord() {
@@ -10,6 +10,7 @@ export async function startDiscord() {
   });
   client.on(Events.InteractionCreate, (i) => onInteraction(i).catch((e) => console.error("interaction error", e)));
   client.on(Events.MessageCreate, (m) => onMessage(m).catch((e) => console.error("message error", e)));
+  client.on(Events.GuildCreate, (g) => onGuildJoin(g).catch((e) => console.error("guild join error", e)));
   client.once(Events.ClientReady, async (c) => {
     console.log(`discord ready as ${c.user.tag}`);
     await c.application.fetch().catch(() => undefined);

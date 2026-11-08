@@ -32,6 +32,8 @@ export type Events = {
   "tether/action.decided": {
     data: { actionId: string; runId: string; approved: boolean; note?: string; editedArgs?: Record<string, unknown>; deciderDiscordId?: string; deciderName?: string };
   };
+  /** An organizer pressed Stop on a live run. `run-plan` and `run-agent-step` cancel on it (docs/CARDS.md §7). */
+  "tether/run.cancelled": { data: { runId: string; orgId: string; by: string; byName?: string } };
   "tether/task.overdue": { data: { orgId: string; taskId: string } };
   /** A task owner answered a nudge (DM, or a reply to the nudge in #tasks). */
   "tether/nudge.replied": { data: { orgId: string; taskId: string; ownerDiscordId: string; ownerName?: string; text: string; source: Source } };

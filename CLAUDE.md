@@ -8,6 +8,7 @@ Agentic event-operations platform for hackathon and club organizers, orchestrate
 - `apps/web` — Next.js dashboard (Auth0). Reads the same Postgres.
 - `infra` — Docker Compose + Caddy for the Vultr VM.
 - `docs/ARCHITECTURE.md` — the design, demo scripts, and team seams. Read it before changing the pipeline.
+- `docs/CARDS.md` and `docs/GUIDE.md` — card states, Stop and approvals; the `/help` card and live progress. Read the one you touch.
 
 ## Invariants (enforce in code, never in config)
 - Every side-effecting tool call passes through `policy.decide()` in the agent loop. Tools declare `effect` and `risk`.

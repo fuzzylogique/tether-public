@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { inngest } from "../client.js";
 import { db } from "../../db/client.js";
 import { runs, events, type Plan } from "../../db/schema.js";
@@ -8,6 +8,7 @@ import { runPlanFn } from "./plans.js";
 import { planCard } from "../../ui/cards/plan.js";
 import { statusCard } from "../../ui/cards/status.js";
 import { dashboardRunUrl } from "../../runtime/cards.js";
+import { failRunUnlessCancelled } from "../../runtime/cancel.js";
 
 export function handleRequestFn(notifier: Notifier) {
   return inngest.createFunction(
@@ -46,14 +47,26 @@ export function handleRequestFn(notifier: Notifier) {
           timeout: "24h",
         });
         if (!decided || !decided.data.approved) {
-          await step.run("cancel", async () => {
-            await db().update(runs).set({ status: "cancelled", updatedAt: new Date() }).where(eq(runs.id, run.id));
+          const status = await step.run("cancel", async () => {
+            // No decision in 24h: expire only if nobody claimed the plan in the meantime (the button
+            // handler moves it out of `proposed` first). A late Run then still falls through to cancelled,
+            // because the event it sent arrived after the wait ended and nothing is listening for it.
+            const [expired] = decided ? [] : await db().update(runs).set({ status: "expired", updatedAt: new Date() })
+              .where(and(eq(runs.id, run.id), eq(runs.status, "proposed"))).returning();
+            const status = expired ? "expired" as const : "cancelled" as const;
+            if (!expired) await db().update(runs).set({ status, updatedAt: new Date() }).where(eq(runs.id, run.id));
+            // The plan card keeps live buttons until it is redrawn; leaving it open is the stale-card bug.
+            await notifier.editMessage({
+              channelId: msg.channelId, messageId: msg.messageId,
+              card: planCard({ runId: run.id, request: d.text, plan, requester: { discordId: d.actorDiscordId, name: d.actorName }, createdAt: run.createdAt, dashboardUrl: dashboardRunUrl(run.id), decision: { status, at: new Date() } }),
+            }).catch((e) => console.warn("plan card re-render failed", e));
             await notifier.updateStatus({
-              run: runRef, status: "cancelled",
-              card: statusCard({ runId: run.id, request: d.text, status: "cancelled", steps: [], note: decided ? "Plan cancelled." : "Plan expired after 24 hours without a decision." }),
+              run: runRef, status,
+              card: statusCard({ runId: run.id, request: d.text, status, steps: [], note: decided ? "Plan cancelled." : "Plan expired after 24 hours without a decision." }),
             });
+            return status;
           });
-          return { runId: run.id, status: "cancelled" };
+          return { runId: run.id, status };
         }
         if (decided.data.plan) {
           plan = decided.data.plan;
@@ -67,11 +80,9 @@ export function handleRequestFn(notifier: Notifier) {
       const result = await step.invoke("execute", { function: runPlanFn(notifier), data: { runId: run.id, attachments: d.attachments } })
         .catch(async (e: unknown) => {
           const error = e instanceof Error ? e.message : String(e);
-          await step.run("mark-failed", async () => {
-            await db().update(runs).set({ status: "failed", updatedAt: new Date() }).where(eq(runs.id, run.id));
-            await db().insert(events).values({ orgId: run.orgId, runId: run.id, kind: "run_failed", data: { error } });
-          });
-          return { status: "failed" as const, error };
+          // A Stop cancels run-plan, which surfaces here as an invoke error; the run is already marked.
+          const status = await step.run("mark-failed", () => failRunUnlessCancelled(run.id, error));
+          return { status, error };
         });
       return { runId: run.id, ...result };
     },

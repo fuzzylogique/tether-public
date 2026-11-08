@@ -1,0 +1,107 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 3640029,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Today\n-# 7 events · <t:1794027600:D>"
+        },
+        {
+          "type": 12,
+          "items": [
+            {
+              "media": {
+                "url": "attachment://calendar-today.png"
+              },
+              "description": "Doors + check-in, Opening ceremony, Lunch, Sponsor fair, Gemini API workshop, Dinner, Midnight snack"
+            }
+          ]
+        },
+        {
+          "type": 10,
+          "content": "**Doors + check-in**\n-# <t:1794060000:t>–<t:1794063600:t> · Atrium"
+        },
+        {
+          "type": 9,
+          "components": [
+            {
+              "type": 10,
+              "content": "**Opening ceremony**"
+            },
+            {
+              "type": 10,
+              "content": "-# <t:1794063600:t>–<t:1794067200:t> · Main hall"
+            }
+          ],
+          "accessory": {
+            "type": 2,
+            "label": "Open",
+            "style": 5,
+            "url": "https://calendar.google.com/calendar/event?eid=opening"
+          }
+        },
+        {
+          "type": 10,
+          "content": "**Lunch**\n-# <t:1794070800:t>–<t:1794074400:t> · Cafeteria"
+        },
+        {
+          "type": 10,
+          "content": "**Sponsor fair** · 🔴 now\n-# <t:1794074400:t>–<t:1794085200:t> · Atrium"
+        },
+        {
+          "type": 9,
+          "components": [
+            {
+              "type": 10,
+              "content": "**Gemini API workshop**"
+            },
+            {
+              "type": 10,
+              "content": "-# <t:1794078000:t>–<t:1794081600:t> · Room 204"
+            }
+          ],
+          "accessory": {
+            "type": 2,
+            "label": "Open",
+            "style": 5,
+            "url": "https://calendar.google.com/calendar/event?eid=gemini"
+          }
+        },
+        {
+          "type": 10,
+          "content": "**Dinner**\n-# <t:1794092400:t>–<t:1794096000:t> · Cafeteria"
+        },
+        {
+          "type": 10,
+          "content": "-# +1 more"
+        },
+        {
+          "type": 1,
+          "components": [
+            {
+              "type": 2,
+              "label": "Open calendar",
+              "style": 5,
+              "url": "https://calendar.google.com/calendar"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "name": "calendar-today.png",
+      "bytes": 51692,
+      "sha256": "eb205f8492bcbec541d45f233d8bd8f2da2ae27dfd5535392f09547ca096fb1e"
+    }
+  ]
+}

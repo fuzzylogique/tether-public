@@ -1,0 +1,37 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 8947584,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Nudge <@000000000000000001>: Judge list was due 5 hours ago\n-# 🧭 Coordination wants to run `nudge_owner` · risk medium"
+        },
+        {
+          "type": 10,
+          "content": "⌛ **Expired** without a decision · <t:1794075900:R>\n-# the run failed before a decision"
+        },
+        {
+          "type": 10,
+          "content": "**To**  <@000000000000000001>\n**Task**  Confirm judge list"
+        },
+        {
+          "type": 10,
+          "content": ">>> Hey Alex, the judge list was due 5 hours ago. Can you confirm the last two judges or tell us what's blocking?"
+        },
+        {
+          "type": 10,
+          "content": "-# external · action a1b2c3d4"
+        }
+      ]
+    }
+  ],
+  "files": []
+}

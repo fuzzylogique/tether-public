@@ -4,7 +4,14 @@ import { quote, shortId, text, truncate, ts, type Action, type Block, type Card 
 import { agentMeta } from "./agent.js";
 import { planGraphSpec } from "./graph.js";
 
-export type PlanDecision = { approved: boolean; by: string; at?: Date | string | number };
+/** How a plan card left the `proposed` state. `by` is unknown when the card is repaired from the run row. */
+export type PlanDecision = { status: "approved" | "cancelled" | "expired"; by?: string; at?: Date | string | number };
+
+const DECISION_LINE: Record<PlanDecision["status"], string> = {
+  approved: ":tether_done: **Approved**",
+  cancelled: ":tether_failed: **Cancelled**",
+  expired: "⌛ **Expired** after 24 hours without a decision",
+};
 
 /** Past this many steps the per-step sections would blow the 40-component budget. */
 const MAX_STEP_SECTIONS = 6;
@@ -33,7 +40,7 @@ export function planCard(input: {
 
   const blocks: Block[] = [{ kind: "text", md: quote(input.request, 300) }];
   if (decision) {
-    blocks.unshift(text(`${decision.approved ? ":tether_done: **Approved**" : ":tether_failed: **Cancelled**"} by ${decision.by}${decision.at ? ` · ${ts(decision.at)}` : ""}`));
+    blocks.unshift(text(`${DECISION_LINE[decision.status]}${decision.by ? ` by ${decision.by}` : ""}${decision.at ? ` · ${ts(decision.at)}` : ""}`));
   }
   if (plan.steps.length <= MAX_STEP_SECTIONS) {
     for (const [i, s] of plan.steps.entries()) {
@@ -65,7 +72,7 @@ export function planCard(input: {
   }
 
   return {
-    accent: decision ? (decision.approved ? GREEN : GREY) : TETHER,
+    accent: decision ? (decision.status === "approved" ? GREEN : GREY) : TETHER,
     title: `Plan · ${truncate(plan.summary, 120)}`,
     subtitle,
     blocks,

@@ -91,6 +91,10 @@ export const logExpense = defineTool({
     paidBy: z.string().optional().describe("Person who paid out of pocket and needs to be reimbursed; omit when paid from the org account"),
   }),
   effect: "write", risk: "medium",
+  editFields: [
+    { key: "amount", label: "Amount (total, tax included)", style: "short", required: true }, { key: "category", label: "Category", style: "short", required: true },
+    { key: "vendor", label: "Vendor", style: "short" }, { key: "description", label: "Note", style: "paragraph" }, { key: "paidBy", label: "Paid by (reimbursement)", style: "short" },
+  ],
   summarize: (a) => `Log $${a.amount.toFixed(2)} to ${a.category}${a.vendor ? ` (${a.vendor})` : ""}${a.paidBy ? `, paid by ${a.paidBy}` : ""}`,
   async execute(args, ctx) {
     const date = args.date ?? today();

@@ -1,0 +1,59 @@
+{
+  "flags": 32768,
+  "allowedMentions": {
+    "parse": [],
+    "users": [],
+    "roles": []
+  },
+  "components": [
+    {
+      "type": 17,
+      "accent_color": 15703847,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Escalate: Confirm judge list is 5h overdue after 2 nudges\n-# 🧭 Coordination wants to run `escalate` · risk medium"
+        },
+        {
+          "type": 10,
+          "content": "**Posts to**  <#000000000000000011>\n**Task**  Confirm judge list"
+        },
+        {
+          "type": 10,
+          "content": ">>> Confirm judge list is 5 hours overdue and Alex hasn't replied to 2 nudges. Can a lead step in?"
+        },
+        {
+          "type": 10,
+          "content": "-# external · action a1b2c3d4"
+        },
+        {
+          "type": 1,
+          "components": [
+            {
+              "type": 2,
+              "label": "Approve",
+              "custom_id": "action:approve:a1b2c3d4-0008-4000-8000-000000000000",
+              "style": 3,
+              "disabled": false
+            },
+            {
+              "type": 2,
+              "label": "Edit",
+              "custom_id": "action:edit:a1b2c3d4-0008-4000-8000-000000000000",
+              "style": 2,
+              "disabled": false
+            },
+            {
+              "type": 2,
+              "label": "Reject",
+              "custom_id": "action:reject:a1b2c3d4-0008-4000-8000-000000000000",
+              "style": 4,
+              "disabled": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "files": []
+}

@@ -11,6 +11,8 @@ export type WorkflowTemplate<P extends z.ZodTypeAny = z.ZodTypeAny> = {
   name: string;
   label: string;
   description: string;
+  /** What fires it, as a phrase after "fires": shown on the /help workflows topic. */
+  trigger: string;
   /** Team channel key the run renders into (falls back to ops). */
   channel: string;
   params: P;
@@ -31,6 +33,7 @@ export const sponsorConfirmed = define({
   name: "sponsor-confirmed",
   label: "Sponsor confirmed",
   description: "A sponsor committed money: record the income on the sheet, create the deliverable tasks, and draft the welcome announcement.",
+  trigger: "when a sponsor moves to confirmed (by an agent or a human), or `/workflow run`",
   channel: "sponsorship",
   params: z.object({
     sponsor: z.string(),
@@ -58,6 +61,7 @@ export const sponsorLead = define({
   name: "sponsor-lead",
   label: "New sponsor lead",
   description: "A new company to pitch: add them to the pipeline, draft the intro email, and schedule the follow-up.",
+  trigger: "on `/workflow run` only",
   channel: "sponsorship",
   params: z.object({ sponsor: z.string(), contactEmail: z.string().email().optional(), contactName: z.string().optional(), notes: z.string().optional() }),
   describe: (p) => `${p.sponsor}${p.contactName ? ` via ${p.contactName}` : ""}`,
