@@ -62,8 +62,15 @@ export function approvalComponents(actionId: string) {
   )];
 }
 
+/** Status edits per run: Discord allows about five message edits per five seconds per channel. */
+const STATUS_EDIT_GAP_MS = 1500;
+type StatusInput = Parameters<Notifier["updateStatus"]>[0];
+type Throttle = { lastAt: number; timer?: ReturnType<typeof setTimeout>; latest?: StatusInput };
+
 export class DiscordNotifier implements Notifier {
   constructor(private client: Client) {}
+
+  private throttles = new Map<string, Throttle>();
 
   private target(source: Record<string, string | undefined>) {
     const id = source.threadId ?? source.channelId;
@@ -88,7 +95,36 @@ export class DiscordNotifier implements Notifier {
     return out;
   }
 
-  async updateStatus({ run, lines, status, card }: Parameters<Notifier["updateStatus"]>[0]) {
+  /**
+   * At most one status edit per run every STATUS_EDIT_GAP_MS; calls inside the gap keep only the newest
+   * payload and apply it when the gap ends (docs/GUIDE.md §5.3). Every payload is rendered from the
+   * rows, so dropping an intermediate one loses nothing.
+   */
+  async updateStatus(input: StatusInput) {
+    const key = input.run.id;
+    const t = this.throttles.get(key) ?? { lastAt: 0 };
+    this.throttles.set(key, t);
+    const wait = t.lastAt + STATUS_EDIT_GAP_MS - Date.now();
+    if (wait <= 0 && !t.timer) {
+      t.lastAt = Date.now();
+      await this.applyStatus(input);
+      if (!/^(running|awaiting_approval|approved)$/.test(input.status)) this.throttles.delete(key);
+      return;
+    }
+    t.latest = input;
+    if (!t.timer) {
+      t.timer = setTimeout(() => {
+        t.timer = undefined;
+        const latest = t.latest;
+        t.latest = undefined;
+        if (!latest) return;
+        t.lastAt = Date.now();
+        this.applyStatus(latest).catch((e) => console.warn("status edit failed", e));
+      }, Math.max(wait, 0));
+    }
+  }
+
+  private async applyStatus({ run, lines, status, card }: StatusInput) {
     const channelId = this.target(run.source);
     const ch = await textChannel(this.client, channelId);
     // The live status card is text-only, so in-place edits never drop attachments.

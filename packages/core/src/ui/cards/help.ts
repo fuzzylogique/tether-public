@@ -200,6 +200,22 @@ const BODIES: Record<HelpTopic, (catalog: CommandDoc[]) => string[]> = {
   home: () => home(), start: () => start(), commands, talk: () => talk(), plans: () => plans(), workflows: () => workflows(), agents: () => agentList(), roles: () => roles(),
 };
 
+/**
+ * Posted once when the bot joins a server (docs/GUIDE.md §4): the home topic without the select, since
+ * a public card must not swap under everyone, plus a button that opens the full guide ephemerally.
+ */
+export function welcomeCard(input: { docsUrl?: string }): Card {
+  return {
+    accent: TETHER,
+    blocks: home().map(text),
+    actions: [[
+      { kind: "button", id: "help:open", label: "Open the guide", style: "primary" },
+      ...(input.docsUrl ? [{ kind: "link", url: input.docsUrl, label: "Open docs" } as Action] : []),
+    ]],
+    footer: "Tether · /help any time",
+  };
+}
+
 export function helpCard(topic: HelpTopic, input: { commands: CommandDoc[]; docsUrl?: string }): Card {
   const index = HELP_TOPICS.findIndex((t) => t.value === topic);
   const paragraphs = BODIES[topic](input.commands);

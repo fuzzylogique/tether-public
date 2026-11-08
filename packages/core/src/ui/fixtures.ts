@@ -6,7 +6,7 @@ import type { Plan } from "../db/schema.js";
 import type { ActionRef } from "../tools/types.js";
 import { TETHER } from "./tokens.js";
 import { kv, sep, text, type Card } from "./card.js";
-import { activityCard, approvalCard, budgetCard, calendarCard, helpCard, planCard, sponsorsCard, statusCard, summaryCard, tasksCard, type CommandDoc, type StepState } from "./cards/index.js";
+import { activityCard, approvalCard, budgetCard, calendarCard, helpCard, planCard, sponsorsCard, statusCard, summaryCard, tasksCard, welcomeCard, type CommandDoc, type StepState } from "./cards/index.js";
 
 export const DEFAULT_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png";
 
@@ -142,6 +142,15 @@ export function fixtures(): Fixture[] {
     { name: "plan", card: planCard({ runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, requester: { name: "Fayez" }, createdAt: NOW - 2 * MIN }) },
     { name: "plan-approved", card: planCard({ runId: RUN, request: DEMO_REQUEST, plan: DEMO_PLAN, requester: { name: "Fayez" }, createdAt: NOW - 2 * MIN, decision: { status: "approved", by: "Fayez", at: NOW - MIN } }) },
     { name: "status-running", card: statusCard({ runId: RUN, request: DEMO_REQUEST, status: "running", steps: steps(["done", "running", "running", "pending"]) }) },
+    {
+      name: "status-working", card: statusCard({
+        runId: RUN, request: DEMO_REQUEST, status: "running", dashboardUrl: "https://tether.example.com/runs/1",
+        steps: steps(["done", "running", "running", "pending"]).map((s, i) => i === 1 ? { ...s, recent: [
+          { tool: "list_sponsors", summary: "Shopify", at: NOW - 40_000 },
+          { tool: "create_email_draft", summary: "Welcome aboard, Shopify!", at: NOW - 8_000 },
+        ] } : i === 2 ? { ...s, recent: [{ tool: "budget_summary", at: NOW - 15_000 }, { tool: "sync_budget_from_sheet", at: NOW - 12_000, error: "sheet 1abc not shared with the service account" }] } : s),
+      }),
+    },
     { name: "status-done", card: statusCard({ runId: RUN, request: DEMO_REQUEST, status: "done", steps: steps(["done", "done", "done", "done"]) }) },
     {
       name: "status-waiting", card: statusCard({
@@ -218,6 +227,7 @@ export function fixtures(): Fixture[] {
     { name: "sponsors", card: sponsorsCard({ sponsors: SPONSORS, now: NOW }) },
     { name: "tasks", card: tasksCard({ tasks: TASKS, now: NOW }) },
     { name: "calendar", card: calendarCard({ events: EVENTS, dayStart: DAY_START, now: NOW, timeZone: "America/Toronto", calendarUrl: "https://calendar.google.com/calendar" }) },
+    { name: "welcome", card: welcomeCard({ docsUrl: "https://tether.example.com/docs" }) },
     { name: "help-home", card: helpCard("home", { commands: DEMO_COMMANDS, docsUrl: "https://tether.example.com/docs" }) },
     { name: "help-commands", card: helpCard("commands", { commands: DEMO_COMMANDS, docsUrl: "https://tether.example.com/docs" }) },
     { name: "help-plans", card: helpCard("plans", { commands: DEMO_COMMANDS }) },

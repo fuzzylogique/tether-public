@@ -4,8 +4,12 @@ Spec for two things the bot does not do today: explain itself, and show what an 
 between step boundaries. Companion to `CARDS.md` (card states, Stop, approvals) and `DISCORD_UI.md`
 (visual system). Status: **spec agreed 2026-11-07; G1 built the same day (`ui/cards/help.ts`, `/help` with topic
 choices, `catalog.ts` deriving the command list from `commands.ts`, `help:topic` / `help:home`
-handlers, `help_opened` events, three fixtures with payload snapshots, `help.test.ts`). G2 and L1–L3
-open.** Preview the cards with `pnpm discord:preview -- help`.
+handlers, `help_opened` events, three fixtures with payload snapshots, `help.test.ts`). G2 built the same day
+(`welcomeCard` on `guildCreate`, `help:open`, pointers on the setup and channels replies). L1 built
+the same day (`StepState.recent` + `toolLog`, `tool_call` events carry `stepId` and `summary`,
+`refreshRunCard` reads them, `ctx.refreshStatus` after every tool call, 1.5 s edit throttle in
+`DiscordNotifier`, `events_run_time_idx`). L2 and L3 open.** Preview the cards with
+`pnpm discord:preview -- help welcome status-working`.
 
 Decisions taken: `/help` is one ephemeral card with a topic select, generated from the command
 definitions so it cannot drift; progress is a per-step tool log inside the existing status card, not

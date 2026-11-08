@@ -22,6 +22,8 @@ export type ToolCtx = {
   agent: string;
   /** Side channel to the adapter (Discord). */
   notify: Notifier;
+  /** Redraw the run's status card from the rows (docs/GUIDE.md §5.3); the loop calls it after each tool call. */
+  refreshStatus?: () => Promise<void>;
   /** Attachments on the triggering message (receipts, photos). */
   attachments?: { url: string; contentType?: string; name?: string }[];
 };

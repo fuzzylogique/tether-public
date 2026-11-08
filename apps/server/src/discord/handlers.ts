@@ -1,12 +1,12 @@
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle,
-  type Interaction, type Message, type ChatInputCommandInteraction, type AutocompleteInteraction,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, MessageFlags, ModalBuilder, PermissionFlagsBits, TextInputBuilder, TextInputStyle,
+  type Guild, type Interaction, type Message, type ChatInputCommandInteraction, type AutocompleteInteraction,
   type ButtonInteraction, type StringSelectMenuInteraction, type ModalSubmitInteraction,
 } from "discord.js";
 import { and, desc, eq, gt, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import {
   WORKFLOWS, acceptDriveInvite, agentNames, agents, applyEdit, approvalCardFor, budgetCard, buildInboxDigest, buildToolCtx, calendarCard, cancelRun, dashboardRunUrl, db, digestCard, driveInviteFor, editFieldsFor, fieldValue, getTool, hasRole, helpCard, inngest, isHelpTopic, isLiveRun, loadActor,
-  loadOrgByGuild, planCard, refreshRunCard, schema, settledDecision, sponsorsCard, tasksCard, teamChannelFor, workflowNames,
+  loadOrgByGuild, planCard, refreshRunCard, schema, settledDecision, sponsorsCard, tasksCard, teamChannelFor, welcomeCard, workflowNames,
   type ApprovalDecision, type BudgetExtras, type BudgetRow, type EventRow, type Plan, type PlanDecision, type SponsorRow, type TaskRow,
 } from "@tether/core";
 import { planEmbed, resultEmbed } from "./embeds.js";
@@ -115,6 +115,20 @@ async function onHelpTopic(i: StringSelectMenuInteraction | ButtonInteraction, p
   await i.update(await renderEdit(helpCard(topic, { commands: commandCatalog(), docsUrl: docsUrl() })));
   const org = i.guildId ? await loadOrgByGuild(i.guildId) : undefined;
   if (org) await db().insert(schema.events).values({ orgId: org.id, kind: "help_opened", data: { topic, discordId: i.user.id } });
+}
+
+/**
+ * The bot was added to a server (docs/GUIDE.md §4): post the welcome card once, to the system channel
+ * when it can speak there, else the first text channel it can. Nothing is stored; `/help` is always there.
+ */
+export async function onGuildJoin(guild: Guild) {
+  const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+  const canPost = (c: { permissionsFor: (m: typeof me & object) => { has: (p: bigint) => boolean } | null } | null) =>
+    !!me && !!c && !!c.permissionsFor(me)?.has(PermissionFlagsBits.SendMessages);
+  const system = guild.systemChannel && canPost(guild.systemChannel) ? guild.systemChannel : undefined;
+  const channel = system ?? (await guild.channels.fetch()).find((c) => c?.type === ChannelType.GuildText && canPost(c));
+  if (!channel || channel.type !== ChannelType.GuildText) return console.warn(`joined ${guild.name} but can post nowhere`);
+  await channel.send(await render(welcomeCard({ docsUrl: docsUrl() })));
 }
 
 async function onCommand(i: ChatInputCommandInteraction) {
@@ -252,7 +266,7 @@ async function onTether(i: ChatInputCommandInteraction, org: Org | undefined) {
     };
     await db().insert(schema.orgs).values(values).onConflictDoUpdate({ target: schema.orgs.guildId, set: values });
     await db().insert(schema.brandKits).values({ orgId: (await loadOrgByGuild(i.guildId!))!.id }).onConflictDoNothing();
-    return i.editReply(`Configured **${values.name}**. Channels: ${Object.entries(channels).map(([k, v]) => `${k} → <#${v}>`).join(", ") || "none"}.`);
+    return i.editReply(`Configured **${values.name}**. Channels: ${Object.entries(channels).map(([k, v]) => `${k} → <#${v}>`).join(", ") || "none"}.\n-# Next: \`/tether channels\` for team channels and roles, then \`/help start\`.`);
   }
   if (!org) return i.reply({ content: "Run `/tether setup` first.", ephemeral: true });
   if (sub === "bind") {
@@ -277,7 +291,7 @@ async function onTether(i: ChatInputCommandInteraction, org: Org | undefined) {
       roles ? (createdRoles.length ? `Created ${createdRoles.length} roles; assign people to them so escalations and approvals reach the right team.` : "Team roles already exist.") : "",
       bind ? "Plain messages in each team channel now go to that team's agent." : "",
     ].filter(Boolean).join(" ");
-    return i.editReply(`${parts}\n\n${linksText(updated)}`);
+    return i.editReply(`${parts}\n\n${linksText(updated)}\n-# Next: try \`/plan request:…\`; \`/help plans\` explains the cards.`);
   }
   if (sub === "links") return i.reply({ content: linksText(org), allowedMentions: { parse: [] } });
   if (sub === "policies") {
@@ -404,6 +418,9 @@ async function repairPlan(i: Interactive, inMessage: boolean, run: Run) {
 async function onButton(customId: string, i: ButtonInteraction) {
   const [kind, verb, id, sub] = customId.split(":");
   if (kind === "help" && verb === "home") return onHelpTopic(i, "home");
+  if (kind === "help" && verb === "open") {
+    return i.reply({ ...(await render(helpCard("home", { commands: commandCatalog(), docsUrl: docsUrl() }))), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
+  }
   if (kind === "access" && verb === "share" && id) {
     const check = await driveInviteFor({ inviteId: id, discordId: i.user.id, memberRoleIds: memberRoleIds(i) });
     if ("error" in check) return i.reply({ content: check.error, ephemeral: true });

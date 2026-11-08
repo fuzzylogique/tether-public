@@ -133,6 +133,8 @@ export const events = pgTable("events", {
   data: jsonb("data").$type<Record<string, unknown>>().default({}).notNull(),
 }, (t) => [
   index("events_org_time_idx").on(t.orgId, t.time),
+  // The status card's tool log reads a run's tool_call events on every redraw (docs/GUIDE.md §5.2).
+  index("events_run_time_idx").on(t.runId, t.time),
   // `create_hypertable` creates this default index (time DESC). Declaring it here keeps drizzle-kit from
   // dropping it as "unknown"; on a fresh DB drizzle creates it first and create_hypertable skips its own.
   index("events_time_idx").on(t.time.desc().nullsFirst()),

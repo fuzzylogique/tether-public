@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { orgs, users } from "../db/schema.js";
 import type { Actor, Notifier, ToolCtx } from "../tools/types.js";
+import { refreshRunCard } from "./status.js";
 
 export async function loadOrgByGuild(guildId: string) {
   const [org] = await db().select().from(orgs).where(eq(orgs.guildId, guildId));
@@ -21,5 +22,6 @@ export async function buildToolCtx(input: {
 }): Promise<ToolCtx> {
   const [org] = await db().select().from(orgs).where(eq(orgs.id, input.orgId));
   if (!org) throw new Error(`org ${input.orgId} not found`);
-  return { db: db(), org, actor: input.actor, runId: input.runId, stepId: input.stepId, agent: input.agent, notify: input.notify, attachments: input.attachments };
+  const refreshStatus = () => refreshRunCard(input.runId, input.notify).catch((e) => console.warn("status re-render failed", e));
+  return { db: db(), org, actor: input.actor, runId: input.runId, stepId: input.stepId, agent: input.agent, notify: input.notify, attachments: input.attachments, refreshStatus };
 }

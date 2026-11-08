@@ -5,9 +5,9 @@
  */
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { actions, orgs, runs, steps } from "../db/schema.js";
+import { actions, events, orgs, runs, steps } from "../db/schema.js";
 import type { Notifier } from "../tools/types.js";
-import { statusCard, type PendingApproval, type StepState } from "../ui/cards/status.js";
+import { statusCard, TOOL_LOG_LINES, type PendingApproval, type StepState, type ToolLogLine } from "../ui/cards/status.js";
 import { dashboardRunUrl, messageUrl } from "./cards.js";
 
 export async function refreshRunCard(runId: string, notifier: Notifier) {
@@ -18,9 +18,11 @@ export async function refreshRunCard(runId: string, notifier: Notifier) {
   // Plan order, not insertion order: parallel levels are inserted in one batch.
   const order = new Map((run.plan?.steps ?? []).map((s, i) => [s.id, i]));
   rows.sort((a, b) => (order.get(a.stepKey) ?? 99) - (order.get(b.stepKey) ?? 99));
+  const recent = rows.some((r) => r.status === "running") ? await recentToolCalls(runId) : new Map<string, ToolLogLine[]>();
   const states: StepState[] = rows.map((r) => ({
     id: r.stepKey, agent: r.agent, instruction: r.instruction, status: r.status,
     finishedAt: r.status === "done" || r.status === "failed" ? r.updatedAt.toISOString() : undefined,
+    recent: r.status === "running" ? recent.get(r.id) : undefined,
   }));
 
   const open = await db().select().from(actions).where(and(eq(actions.runId, runId), eq(actions.status, "pending")));
@@ -42,6 +44,21 @@ export async function refreshRunCard(runId: string, notifier: Notifier) {
       stoppedBy: run.status === "cancelled" && run.cancelledBy ? `<@${run.cancelledBy}>` : undefined,
     }),
   });
+}
+
+/** The last few `tool_call` events per step (docs/GUIDE.md §5.2), oldest first, keyed by step id. */
+async function recentToolCalls(runId: string): Promise<Map<string, ToolLogLine[]>> {
+  const rows = await db().select({ time: events.time, data: events.data }).from(events)
+    .where(and(eq(events.runId, runId), eq(events.kind, "tool_call"))).orderBy(events.time);
+  const out = new Map<string, ToolLogLine[]>();
+  for (const r of rows) {
+    const d = r.data as { stepId?: string; tool?: string; summary?: string; error?: string };
+    if (!d.stepId || !d.tool) continue;
+    const list = out.get(d.stepId) ?? [];
+    list.push({ tool: d.tool, summary: d.summary, at: r.time.toISOString(), error: d.error });
+    out.set(d.stepId, list.slice(-TOOL_LOG_LINES));
+  }
+  return out;
 }
 
 /**

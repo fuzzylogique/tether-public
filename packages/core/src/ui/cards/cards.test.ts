@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Action } from "../card.js";
 import { APPROVALS } from "../fixtures.js";
 import { approvalCard } from "./approval.js";
-import { isLiveRun, statusCard } from "./status.js";
+import { isLiveRun, statusCard, toolLog, type StepState } from "./status.js";
 
 const flat = (actions?: Action[][]) => (actions ?? []).flat();
 const buttonIds = (actions?: Action[][]) => flat(actions).flatMap((a) => (a.kind === "button" ? [a.id] : []));
@@ -57,4 +57,21 @@ test("approvalCard: the ↩ Run link follows context.runUrl, decided or not", ()
 test("approvalCard: the gate names the approver role when the policy set one", () => {
   assert.match(approvalCard(APPROVALS.email).subtitle ?? "", /risk high · needs lead/);
   assert.match(approvalCard(APPROVALS.expense).subtitle ?? "", /risk medium$/);
+});
+
+test("toolLog: at most three lines, oldest first, only under a running step", () => {
+  const recent = [1, 2, 3, 4, 5].map((n) => ({ tool: `t${n}`, at: n * 1000 }));
+  const running: StepState = { id: "s", agent: "finance", instruction: "x", status: "running", recent };
+  const lines = toolLog(running);
+  assert.equal(lines.length, 4, "three tool lines plus thinking…");
+  assert.match(lines[0]!, /t3/); assert.match(lines[2]!, /t5/);
+  assert.match(lines[3]!, /thinking…/);
+  assert.deepEqual(toolLog({ ...running, recent: undefined }), ["-# :tether_running: thinking…"]);
+  for (const status of ["pending", "awaiting_approval", "done", "failed", "cancelled", "skipped"] as const) {
+    assert.deepEqual(toolLog({ ...running, status }), [], status);
+  }
+  const failed = toolLog({ ...running, recent: [{ tool: "sync_budget_from_sheet", at: 0, error: "sheet not shared" }] });
+  assert.match(failed[0]!, /⚠️ sync_budget_from_sheet · sheet not shared/);
+  const summarised = toolLog({ ...running, recent: [{ tool: "list_sponsors", summary: "Shopify", at: 0 }] });
+  assert.match(summarised[0]!, /🔎 list_sponsors · Shopify/);
 });
